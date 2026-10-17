@@ -20,18 +20,19 @@ const userSchema = new Schema(
     role: { type: String, required: true, enum: Object.values(ROLES) },
     isActive: { type: Boolean, required: true, default: true },
   },
-  {
-    timestamps: true,
-    toJSON: {
-      versionKey: false,
-      // Defence in depth: even a document loaded with +passwordHash never serializes it.
-      transform: (_doc, ret) => {
-        const { passwordHash: _passwordHash, ...safe } = ret;
-        return safe;
-      },
-    },
-  },
+  { timestamps: true },
 );
+
+// Set after the schema is built: inside the constructor, a transform typed from the schema
+// makes TypeScript lose the inferred document type.
+userSchema.set('toJSON', {
+  versionKey: false,
+  // Defence in depth: even a document loaded with +passwordHash never serializes it.
+  transform: (_doc, ret) => {
+    const { passwordHash: _passwordHash, ...safe } = ret;
+    return safe;
+  },
+});
 
 export type User = InferSchemaType<typeof userSchema>;
 

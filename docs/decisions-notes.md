@@ -92,3 +92,24 @@ Running notes, phase by phase, for writing `ENGINEERING_DECISIONS.md`. Each entr
 | audit_logs | `{ entity, entityId, createdAt: -1 }` | The history of one record, newest first |
 
 Every index exists because a query needs it, since each extra index slows writes slightly. Appointments carry seven, which is acceptable because they are read (lists, slot grids, searches) far more often than they are written.
+
+## Phase 3: Authentication
+
+- **Two tokens.** A short-lived access token (15 minutes) comes back in the response body; the frontend keeps it in memory and sends it as `Authorization: Bearer`. A refresh token (7 days) lives only in an httpOnly cookie, so no JavaScript, including an injected script, can read it.
+- **The refresh cookie** is `HttpOnly`, `Secure`, `SameSite=Strict` (configurable for deployments where the frontend and API are on different sites) and `Path=/api/v1/auth`, so the browser sends it only to the auth endpoints. SameSite and the CORS allow-list protect `/refresh` and `/logout` against CSRF.
+- **Both tokens are JWTs** (the assessment asks for a JWT refresh token), signed with HS256 using two different secrets and two audiences, so one can never be accepted as the other.
+  - The algorithm is pinned when verifying, which rules out `alg: none`-style attacks.
+  - After the signature check, the claims are validated with zod.
+- **The access token carries the role and, for doctors, the doctor profile id.** Authenticating a request needs no database lookup, and the doctor-scoping rule has what it needs. The trade-off: deactivating a user takes effect when their access token expires, within 15 minutes. Refreshing checks `isActive` and fails at once.
+- **Refresh tokens are stored as SHA-256 hashes**, together with expiry, revocation time, the hash of the replacing token, IP and user agent. A database leak exposes no usable token. A random `jti` makes every token unique.
+- **Rotation with reuse detection.**
+  - Every refresh revokes the old token and issues a new one.
+  - If a revoked token is presented again, it must have been copied. Every session of that user is revoked and the event is audited as `REFRESH_TOKEN_REUSE`.
+  - The old token is claimed with an atomic conditional update, so two simultaneous refreshes with the same token can't both succeed.
+- **A failed login gives nothing away.**
+  - An unknown email, a wrong password and a disabled account all get the same 401, "Invalid email or password". The audit log records the real reason.
+  - An unknown email still runs a bcrypt comparison against a dummy hash, so response time doesn't reveal which emails exist.
+  - Only failed logins count toward the login rate limit.
+- **Passwords** use bcrypt with a configurable cost (12 by default; at least 10 is enforced in production). New passwords need 8 to 72 characters, including a letter and a number. 72 is bcrypt's limit, so longer passwords are refused rather than silently cut.
+- **Audit entries** record successful and failed logins, logouts and token reuse, with IP and user agent. Audit writes are best effort: a failed write is logged as an error but never fails the user's action. A stricter design would write the entry in the same transaction, or through an outbox.
+- **The seed script** creates the departments and the first Super Admin from env vars. It can run any number of times and never changes an existing admin's password. `npm run secrets` fills in the JWT secrets in `.env` without printing them.

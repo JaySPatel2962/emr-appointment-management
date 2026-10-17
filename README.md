@@ -14,7 +14,9 @@ Appointment management module for an enterprise EMR system. It covers role-based
 ```bash
 cd server
 npm install
-cp .env.example .env   # then fill in real values
+cp .env.example .env   # then set MONGO_URI and the SEED_ADMIN_* values
+npm run secrets        # fills in the two JWT secrets in .env, without printing them
+npm run seed           # creates the departments and the first Super Admin
 npm run dev
 ```
 
@@ -26,6 +28,7 @@ npm run dev
 | `npm run build` | Compiles TypeScript to `dist/` (tsc) |
 | `npm start` | Runs the compiled build |
 | `npm run seed` | Creates the first Super Admin and the departments from env vars |
+| `npm run secrets` | Generates any missing JWT secret in `.env`, without printing it |
 | `npm run lint` | ESLint (type-aware) |
 | `npm run format` | Prettier |
 | `npm run typecheck` | `tsc --noEmit` |
@@ -46,6 +49,12 @@ The server validates these at startup and refuses to start if any are invalid, n
 | `MONGO_SERVER_SELECTION_TIMEOUT_MS` | How long to wait for MongoDB at startup | `10000` |
 | `CLIENT_URL` | Frontend origin allowed by CORS (with credentials) | `http://localhost:5173` |
 | `CLINIC_TIMEZONE` | IANA timezone for all appointment dates and times | `Asia/Kolkata` |
+| `JWT_ACCESS_SECRET` | Signs access tokens: at least 32 characters | required |
+| `JWT_REFRESH_SECRET` | Signs refresh tokens: at least 32 characters, different from the access secret | required |
+| `JWT_ACCESS_TTL_SECONDS` | Access token lifetime | `900` (15 minutes) |
+| `REFRESH_TOKEN_TTL_DAYS` | Refresh token lifetime | `7` |
+| `REFRESH_COOKIE_SAMESITE` | `strict`, `lax` or `none`. Use `none` when the frontend and API are on different sites. | `strict` |
+| `BCRYPT_ROUNDS` | bcrypt cost factor, at least 10 in production | `12` |
 | `TRUST_PROXY_HOPS` | Reverse proxies in front of the API, so client IPs and rate limits are correct | `0` |
 | `BODY_LIMIT` | Maximum JSON body size | `100kb` |
 | `RATE_LIMIT_WINDOW_MS` | Rate limit window | `900000` (15 minutes) |
@@ -85,6 +94,15 @@ Errors have `success: false` and `data: null`. `meta.requestId` matches the `X-R
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/health` | none | Service and database status: 200, or 503 when the database is down |
+| `POST` | `/api/v1/auth/login` | none | Email and password. Returns an access token and sets the refresh cookie. |
+| `POST` | `/api/v1/auth/refresh` | refresh cookie | Returns a new access token and rotates the refresh token |
+| `POST` | `/api/v1/auth/logout` | refresh cookie | Revokes the refresh token and clears the cookie |
+
+### Authentication
+
+Send the access token as `Authorization: Bearer <accessToken>`. It lasts 15 minutes. To get a new one, call `POST /api/v1/auth/refresh` with credentials included (`credentials: 'include'` in `fetch`, `withCredentials: true` in axios), so the browser sends the httpOnly refresh cookie. Each refresh replaces the refresh token. Presenting an old one again ends every session of that user.
+
+The seed script also reads `SEED_ADMIN_NAME`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` and `SEED_DEPARTMENTS` (see `.env.example`).
 
 ## Database design
 

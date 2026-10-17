@@ -11,6 +11,10 @@ export default defineConfig({
       // (tests/helpers/setup-db.ts), never to this address or to Atlas.
       MONGO_URI: 'mongodb://127.0.0.1:27017/unused-in-tests',
       CLIENT_URL: 'http://localhost:5173',
+      JWT_ACCESS_SECRET: 'test-access-secret-not-used-anywhere-else-0001',
+      JWT_REFRESH_SECRET: 'test-refresh-secret-not-used-anywhere-else-0002',
+      // The lowest cost bcrypt accepts keeps password hashing fast in tests.
+      BCRYPT_ROUNDS: '4',
       RATE_LIMIT_MAX: '10000',
       LOGIN_RATE_LIMIT_MAX: '10000',
     },
