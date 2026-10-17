@@ -46,6 +46,8 @@ Enterprise EMR appointment management module (MERN). Code quality and architectu
 
 ## Workflow
 - Plan before coding; one feature per commit, using conventional commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`)
+- Commit messages: a subject of at most 50 characters, imperative, lowercase after the type prefix, no trailing period (e.g. `feat: add slot generation`); then a blank line and a body wrapped at 72 characters that explains what changed and why
+- Commits and PRs carry only the author's name: no `Co-Authored-By` trailers or AI attribution lines
 - Never commit `.env`; keep `.env.example` updated
 - Update `README.md` and `ENGINEERING_DECISIONS.md` as features land; record design decisions in `docs/decisions-notes.md`
 
