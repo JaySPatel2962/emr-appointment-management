@@ -1,7 +1,12 @@
 import { model, Schema } from 'mongoose';
 import type { InferSchemaType } from 'mongoose';
 
-import { ACTIVE_APPOINTMENT_STATUSES, APPOINTMENT_STATUS } from '#app/constants/appointment.js';
+import {
+  ACTIVE_APPOINTMENT_STATUSES,
+  APPOINTMENT_STATUS,
+  NOTES_MAX_LENGTH,
+  PURPOSE_MAX_LENGTH,
+} from '#app/constants/appointment.js';
 import { lowercaseCopy } from '#app/models/plugins/lowercase-copy.js';
 import { DATE_PATTERN, TIME_PATTERN } from '#app/utils/time.js';
 
@@ -17,8 +22,8 @@ const appointmentSchema = new Schema(
     date: { type: String, required: true, match: DATE_PATTERN },
     slotStart: { type: String, required: true, match: TIME_PATTERN },
     slotEnd: { type: String, required: true, match: TIME_PATTERN },
-    purpose: { type: String, required: true, trim: true, maxlength: 200 },
-    notes: { type: String, trim: true, maxlength: 2000, default: '' },
+    purpose: { type: String, required: true, trim: true, maxlength: PURPOSE_MAX_LENGTH },
+    notes: { type: String, trim: true, maxlength: NOTES_MAX_LENGTH, default: '' },
     status: {
       type: String,
       required: true,

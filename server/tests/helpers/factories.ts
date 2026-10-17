@@ -1,11 +1,14 @@
 import { Types } from 'mongoose';
 
+import { GENDERS } from '#app/constants/patient.js';
 import { ROLES } from '#app/constants/roles.js';
 import type { Role } from '#app/constants/roles.js';
 import { AppointmentModel } from '#app/models/appointment.model.js';
 import type { Appointment } from '#app/models/appointment.model.js';
 import { DepartmentModel } from '#app/models/department.model.js';
 import { DoctorModel } from '#app/models/doctor.model.js';
+import { PatientModel } from '#app/models/patient.model.js';
+import type { Patient } from '#app/models/patient.model.js';
 import { UserModel } from '#app/models/user.model.js';
 import { hashPassword } from '#app/services/password.service.js';
 import type { DaySchedule } from '#app/utils/schedule.js';
@@ -66,6 +69,16 @@ export const createDoctor = async (options: DoctorOptions = {}) => {
   });
   return { user, doctor };
 };
+
+/** Test patients get codes like PAT-T7, which never collide with codes from the counter. */
+export const createPatient = (overrides: Partial<Patient> = {}) =>
+  PatientModel.create({
+    patientCode: `PAT-T${nextNumber()}`,
+    name: 'Asha Rao',
+    mobile: '9876543210',
+    gender: GENDERS.FEMALE,
+    ...overrides,
+  });
 
 interface AppointmentDoctor {
   _id: Types.ObjectId;

@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { APPOINTMENT_STATUS } from '#app/constants/appointment.js';
 import { ROLES } from '#app/constants/roles.js';
@@ -28,16 +28,6 @@ const appointment = (overrides: Partial<Appointment> = {}) => ({
   patientMobile: '9876543210',
   doctorName: 'Dr. Kavya Mehta',
   ...overrides,
-});
-
-beforeAll(async () => {
-  // Indexes build in the background once connected; wait for them before relying on them.
-  await Promise.all([
-    AppointmentModel.init(),
-    UserModel.init(),
-    DepartmentModel.init(),
-    RefreshTokenModel.init(),
-  ]);
 });
 
 describe('appointment double-booking index', () => {

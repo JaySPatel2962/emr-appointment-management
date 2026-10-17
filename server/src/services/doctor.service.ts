@@ -16,7 +16,7 @@ import { AppError } from '#app/utils/app-error.js';
 import { toObjectId } from '#app/utils/object-id.js';
 import { pageSkip, toPage } from '#app/utils/pagination.js';
 import type { Page } from '#app/utils/pagination.js';
-import { escapeRegex } from '#app/utils/regex.js';
+import { containsRegex } from '#app/utils/regex.js';
 import type { DaySchedule } from '#app/utils/schedule.js';
 import type {
   CreateDoctorInput,
@@ -89,8 +89,7 @@ export const listDoctors = async (
   actor: AuthUser,
 ): Promise<Page<DoctorDto>> => {
   // Case-insensitive "contains" on name or specialization. A scan is fine at doctor-list size.
-  const search =
-    query.search === undefined ? undefined : new RegExp(escapeRegex(query.search), 'i');
+  const search = query.search === undefined ? undefined : containsRegex(query.search);
   const filter: QueryFilter<Doctor> = {
     ...doctorScope(actor),
     ...(query.departmentId === undefined ? {} : { departmentId: toObjectId(query.departmentId) }),

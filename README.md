@@ -106,6 +106,48 @@ Errors have `success: false` and `data: null`. `meta.requestId` matches the `X-R
 | `GET` | `/api/v1/doctors/:id` | any role | One doctor with their schedule. A doctor can only fetch their own profile. |
 | `PUT` | `/api/v1/doctors/:id/schedule` | Super Admin | Replaces the weekly schedule, and optionally the slot length |
 | `GET` | `/api/v1/slots?doctorId=&date=` | any role | A doctor's slots for one date, each `AVAILABLE`, `BOOKED` (with the appointment id) or `PAST`. Optional `departmentId`. Past dates are rejected, and a doctor can only see their own slots. |
+| `GET` | `/api/v1/patients?search=` | Super Admin, Receptionist | Search by patient code, the start of a mobile number or the start of a name. Without `search`, every patient, sorted by name. Paginated. |
+| `POST` | `/api/v1/appointments` | Super Admin, Receptionist | Books a slot for an existing patient (`patientId`) or registers a new one (`newPatient`) |
+| `GET` | `/api/v1/appointments` | any role | Filtered, sorted and paginated list (see below). A doctor sees only their own appointments. |
+| `GET` | `/api/v1/appointments/:id` | any role | One appointment with the patient's details |
+| `PUT` | `/api/v1/appointments/:id` | any role | Updates `purpose` and `notes`. Doctors can only update notes. |
+| `DELETE` | `/api/v1/appointments/:id` | Super Admin, Receptionist | Cancels the appointment, which stays on record, and frees the slot |
+| `POST` | `/api/v1/appointments/:id/arrive` | Super Admin, Receptionist | Marks the patient as arrived (SCHEDULED to ARRIVED) |
+| `POST` | `/api/v1/appointments/:id/complete` | Super Admin, Doctor | Completes the visit (ARRIVED to COMPLETED) |
+
+### Booking an appointment
+
+```json
+{
+  "doctorId": "6711a2f4c1d2e3f4a5b6c7b2",
+  "date": "2026-10-20",
+  "slotStart": "09:15",
+  "purpose": "Follow-up",
+  "notes": "Optional",
+  "patientId": "6711a2f4c1d2e3f4a5b6c7a1"
+}
+```
+
+For a new patient, send `"newPatient": { "name": "Asha Rao", "mobile": "98765 43210", "gender": "FEMALE", "dateOfBirth": "1990-05-14" }` instead of `patientId`. The slot's end time and the department come from the doctor's schedule.
+
+- A taken slot answers 409 "Slot already booked".
+- A time the doctor doesn't offer (a break, a day off, a time off the slot grid) or a slot that has already started answers 422.
+
+### Appointment workflow
+
+SCHEDULED, then ARRIVED, then COMPLETED. A SCHEDULED or ARRIVED appointment can also be CANCELLED. Any other move answers 409.
+
+The purpose can change until the visit is completed, and the notes can change until the appointment is cancelled.
+
+### Appointment list
+
+`GET /api/v1/appointments` takes:
+
+- `page`, `limit`
+- `sortBy`: `date` (the default, then by time), `createdAt`, `patientName`, `doctorName` or `status`. `sortOrder`: `asc` (the default) or `desc`.
+- `status`, `doctorId`, `departmentId`
+- `dateFrom` and `dateTo`, inclusive, as `YYYY-MM-DD`
+- `patientName` (the start of the name), `mobile` (the start of the number) and `doctorName` (any part of the name)
 
 ### Authentication
 

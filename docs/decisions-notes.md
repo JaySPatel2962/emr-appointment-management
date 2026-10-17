@@ -135,3 +135,31 @@ Every index exists because a query needs it, since each extra index slows writes
 - **BOOKED wins over PAST.** A booked slot keeps its appointment id even after it starts, so a receptionist can still mark a late arrival.
 - **Booking reuses the generator** (`resolveBookableSlot`), so the API can never book a time that the slot grid wouldn't offer: not in a break, not on a day off, not off the grid, not in the past.
 - **Known limitation:** if a schedule changes after appointments were booked, an appointment outside the new schedule no longer appears in the slot grid. It is still in the appointment list.
+
+## Phase 6: Appointments and patients
+
+- **Double booking: insert, and let the unique index decide.** There is no "is it free?" check before inserting, because two requests could both pass it. Booking for an existing patient is a single insert, and a duplicate key error on the slot index becomes 409 "Slot already booked".
+- **A new patient and their appointment are saved in one transaction.** If the slot turns out to be taken, the transaction aborts and no orphan patient record is left (tested). The transaction helper retries the transient write conflicts that concurrent bookings cause.
+  - The patient code is reserved from the counter before the transaction starts, so bookings don't all contend on one counter document.
+  - A failed booking leaves a gap in the codes, which is harmless.
+- **Bookable means "offered by the slot grid".** The service regenerates the doctor's slots for that date and requires an exact match on the start time, so a break, a day off, an off-grid time or a slot that has started gets a 422. The slot's end time and the department come from the server, never from the client.
+- **Status changes are atomic.** Each change is a single `findOneAndUpdate` whose filter includes the statuses it may start from, taken from the transition map.
+  - There is no read-then-write, so of two people acting at once only one succeeds.
+  - An invalid move gets a 409 that names the current status.
+  - Each change sets its timestamp (`arrivedAt`, `completedAt` or `cancelledAt`) and is audited.
+- **Edit rules.**
+  - The purpose can change while the appointment is SCHEDULED or ARRIVED.
+  - Consultation notes can also change after it is COMPLETED.
+  - Nothing changes once it is CANCELLED.
+  - Doctors can only change notes, and get a 403 otherwise.
+  - Cancelling is soft: DELETE keeps the record and frees the slot.
+- **Doctor scoping is forced in the service**, in every query (list, detail, update, status change), not left to the controllers. A doctor's `doctorId` and `doctorName` filters are ignored, and another doctor's appointment gets a 404.
+- **Filters are joined with `$and`**, one condition each, so no filter can overwrite another's field. The Phase 4 bug came from spreading two `_id` conditions into one object.
+- **List performance.**
+  - Patient name and mobile filters are anchored prefix regexes on indexed fields.
+  - `doctorName` first finds the matching doctor ids (one small query), then filters on the indexed `doctorId`.
+  - Sorting is allowed only on whitelisted fields (anything else is a 400), with `_id` as the final tiebreaker so pages never overlap.
+  - Queries use `.lean()` and a projection, and `Promise.all` runs the page query and the count together.
+- **Audit entries** for create (plus patient registration), update (field names only, never clinical text), arrive, complete and cancel.
+- **Patient search** reads the term as a patient code (exact match), the start of a mobile number (normalized, with `+91` dropped) or the start of a name. Each is answered from an index.
+- **Tests wait for the indexes,** as the server does at startup. A unique-email test once passed only because the index build happened to finish first. The test setup now waits for every index before any test runs, and the suite passed three runs in a row.

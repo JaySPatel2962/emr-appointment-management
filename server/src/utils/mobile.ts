@@ -13,3 +13,10 @@ export const normalizeMobile = (value: string): string =>
   value.replace(SEPARATORS, '').replace(COUNTRY_OR_TRUNK_PREFIX, '');
 
 export const isValidMobile = (value: string): boolean => MOBILE_PATTERN.test(value);
+
+/**
+ * Turns (part of) a typed mobile number into a prefix of the stored 10 digits. A "+91" is
+ * dropped even from partial input, since nothing stored starts with "+".
+ */
+export const mobileSearchPrefix = (value: string): string =>
+  normalizeMobile(value).replace(/^\+91/, '');
