@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 import { env } from '#app/config/env.js';
 import { logger } from '#app/config/logger.js';
+import * as models from '#app/models/index.js';
 
 mongoose.set('strictQuery', true);
 
@@ -22,15 +23,18 @@ const watchConnection = (): void => {
   });
 };
 
-// autoIndex builds every model's indexes at startup, including the double-booking unique index.
-// Wait for those builds and log any that failed, so a missing index never goes unnoticed.
-const logFailedIndexBuilds = async (): Promise<void> => {
-  const models = Object.values(mongoose.models);
-  const results = await Promise.allSettled(models.map((model) => model.init()));
+// autoIndex builds every model's indexes, including the double-booking unique index. Startup
+// waits for all of them before the server listens, and logs any build that failed.
+const buildIndexes = async (): Promise<void> => {
+  const allModels = Object.values(models);
+  const results = await Promise.allSettled(allModels.map((model) => model.init()));
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
       const reason: unknown = result.reason;
-      logger.error({ err: reason, model: models[index]?.modelName }, 'MongoDB index build failed');
+      logger.error(
+        { err: reason, model: allModels[index]?.modelName },
+        'MongoDB index build failed',
+      );
     }
   });
 };
@@ -52,7 +56,7 @@ export const connectDb = async (): Promise<void> => {
   }
   watchConnection();
   logger.info({ database: mongoose.connection.name }, 'MongoDB connected');
-  await logFailedIndexBuilds();
+  await buildIndexes();
 };
 
 export const disconnectDb = async (): Promise<void> => {

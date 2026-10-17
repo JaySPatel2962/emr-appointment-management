@@ -86,6 +86,60 @@ Errors have `success: false` and `data: null`. `meta.requestId` matches the `X-R
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/health` | none | Service and database status: 200, or 503 when the database is down |
 
+## Database design
+
+MongoDB with Mongoose. How the collections relate:
+
+```mermaid
+erDiagram
+    USERS ||--o| DOCTORS : "has a profile"
+    DEPARTMENTS ||--o{ DOCTORS : "has"
+    DOCTORS ||--o{ APPOINTMENTS : "sees"
+    PATIENTS ||--o{ APPOINTMENTS : "books"
+    DEPARTMENTS ||--o{ APPOINTMENTS : "groups"
+    USERS ||--o{ APPOINTMENTS : "creates"
+    USERS ||--o{ REFRESH_TOKENS : "signs in with"
+    USERS ||--o{ AUDIT_LOGS : "performs"
+```
+
+| Collection | What it stores |
+| --- | --- |
+| `users` | Staff accounts: name, email (unique), role, active flag, and the bcrypt password hash, which is never returned |
+| `departments` | Department names (unique, case-insensitive) |
+| `doctors` | Doctor profiles: user, department, name, specialization, slot length, and the weekly schedule of working days with sessions and breaks |
+| `patients` | Patient code (`PAT-000001`), name, mobile, gender and date of birth |
+| `appointments` | Patient, doctor, department, date, slot, purpose, notes, status with a timestamp per status change, plus copies of the patient's and doctor's names for search |
+| `audit_logs` | Who did what to which record, and when (append-only) |
+| `refresh_tokens` | Hashed refresh tokens with expiry, revocation and rotation |
+| `counters` | Atomic sequences, used for patient codes |
+
+A sample appointment:
+
+```json
+{
+  "_id": "6711a2f4c1d2e3f4a5b6c7d8",
+  "patientId": "6711a2f4c1d2e3f4a5b6c7a1",
+  "doctorId": "6711a2f4c1d2e3f4a5b6c7b2",
+  "departmentId": "6711a2f4c1d2e3f4a5b6c7c3",
+  "date": "2026-10-20",
+  "slotStart": "09:15",
+  "slotEnd": "09:30",
+  "purpose": "Follow-up",
+  "notes": "",
+  "status": "SCHEDULED",
+  "createdBy": "6711a2f4c1d2e3f4a5b6c7e4",
+  "patientCode": "PAT-000042",
+  "patientName": "Asha Rao",
+  "patientNameLower": "asha rao",
+  "patientMobile": "9876543210",
+  "doctorName": "Dr. Kavya Mehta",
+  "createdAt": "2026-10-17T10:02:11.000Z",
+  "updatedAt": "2026-10-17T10:02:11.000Z"
+}
+```
+
+Double booking is prevented by a unique index on `{ doctorId, date, slotStart }` that covers only active appointments, so a cancelled slot can be booked again. Every index, and the reason for it, is listed in [`docs/decisions-notes.md`](docs/decisions-notes.md).
+
 ## Project structure
 
 ```text
