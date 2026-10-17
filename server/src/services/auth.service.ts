@@ -17,6 +17,8 @@ import {
   verifyRefreshToken,
 } from '#app/services/token.service.js';
 import type { SignedRefreshToken } from '#app/services/token.service.js';
+import { toUserDto } from '#app/services/user.service.js';
+import type { UserDto } from '#app/services/user.service.js';
 import type { AuthUser } from '#app/types/auth.js';
 import { AppError } from '#app/utils/app-error.js';
 import type { ClientInfo } from '#app/utils/client-info.js';
@@ -24,14 +26,6 @@ import type { ClientInfo } from '#app/utils/client-info.js';
 // One message for every failed login, so it never reveals which emails have accounts.
 const INVALID_CREDENTIALS = 'Invalid email or password';
 const SESSION_EXPIRED = 'Your session has expired, please log in again';
-
-export interface UserDto {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  doctorId?: string;
-}
 
 export interface AuthSession {
   accessToken: string;
@@ -64,14 +58,6 @@ const toAuthUser = async (user: UserRecord): Promise<AuthUser> => {
   return { id, role: user.role, doctorId: doctor._id.toString() };
 };
 
-const toUserDto = (user: UserRecord, authUser: AuthUser): UserDto => ({
-  id: authUser.id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  ...(authUser.doctorId === undefined ? {} : { doctorId: authUser.doctorId }),
-});
-
 const saveRefreshToken = async (
   userId: Types.ObjectId,
   refreshToken: SignedRefreshToken,
@@ -93,7 +79,7 @@ const buildSession = (
   accessToken: signAccessToken(authUser),
   refreshToken: refreshToken.token,
   refreshTokenExpiresAt: refreshToken.expiresAt,
-  user: toUserDto(user, authUser),
+  user: toUserDto(user, authUser.doctorId),
 });
 
 const loginFailureReason = (userExists: boolean, passwordMatches: boolean): string => {

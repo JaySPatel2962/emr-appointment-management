@@ -113,3 +113,14 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Passwords** use bcrypt with a configurable cost (12 by default; at least 10 is enforced in production). New passwords need 8 to 72 characters, including a letter and a number. 72 is bcrypt's limit, so longer passwords are refused rather than silently cut.
 - **Audit entries** record successful and failed logins, logouts and token reuse, with IP and user agent. Audit writes are best effort: a failed write is logged as an error but never fails the user's action. A stricter design would write the entry in the same transaction, or through an outbox.
 - **The seed script** creates the departments and the first Super Admin from env vars. It can run any number of times and never changes an existing admin's password. `npm run secrets` fills in the JWT secrets in `.env` without printing them.
+
+## Phase 4: Users, doctors and departments
+
+- **A doctor's account and profile are saved in one transaction:** both or neither. A test makes the profile insert fail and checks that no account is left behind. The password is hashed before the transaction starts, because bcrypt is slow and a transaction should stay short.
+- **Duplicate emails are caught by the unique index** (409), not by looking first, so two simultaneous requests can't both create the same login.
+- **Doctor scoping lives in the service.** For a doctor, `listDoctors` and `getDoctor` add the doctor's own id to the query. Another doctor's profile answers 404, not 403, so the ids of other profiles aren't confirmed.
+- **No N+1 queries:** the departments for a whole page of doctors are loaded in one `$in` query.
+- **Schedules are checked by the same rules twice.** zod returns a 400 with the exact field path of each problem, and the Mongoose validator (run on updates with `runValidators`) protects every other write path. When a schedule changes, already booked appointments are kept; flagging the ones that no longer fit is a future improvement.
+- **Doctor search** is a case-insensitive "contains" on name and specialization. It can't use an index, which is fine at the size of a doctor list. User input is escaped before it becomes a regex, so it can't inject patterns.
+- **Validators define the input types.** Services take `z.output<typeof schema>` types, so the shape of a request and the code that uses it can't drift apart.
+- **Middleware order on every route:** authenticate, then authorize, then validate. Callers without access get 401 or 403 and never see validation details.

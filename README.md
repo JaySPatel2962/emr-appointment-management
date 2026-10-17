@@ -74,6 +74,8 @@ Base path: `/api/v1`. Every response, success or error, uses the same envelope:
 }
 ```
 
+Lists are paginated with `page` (default 1) and `limit` (default 20, at most 100), and their `meta` is `{ "page", "limit", "total", "totalPages" }`.
+
 Errors have `success: false` and `data: null`. `meta.requestId` matches the `X-Request-Id` response header, and validation errors list each problem in `meta.errors` as `{ "field": "body.email", "message": "Invalid email address" }`.
 
 | Status | When |
@@ -97,6 +99,12 @@ Errors have `success: false` and `data: null`. `meta.requestId` matches the `X-R
 | `POST` | `/api/v1/auth/login` | none | Email and password. Returns an access token and sets the refresh cookie. |
 | `POST` | `/api/v1/auth/refresh` | refresh cookie | Returns a new access token and rotates the refresh token |
 | `POST` | `/api/v1/auth/logout` | refresh cookie | Revokes the refresh token and clears the cookie |
+| `GET` | `/api/v1/departments` | any role | All departments, sorted by name |
+| `POST` | `/api/v1/users/receptionists` | Super Admin | Creates a receptionist account |
+| `POST` | `/api/v1/doctors` | Super Admin | Creates a doctor's account and profile together |
+| `GET` | `/api/v1/doctors` | any role | Doctors, filtered by `departmentId` and `search` and paginated. A doctor sees only themselves. |
+| `GET` | `/api/v1/doctors/:id` | any role | One doctor with their schedule. A doctor can only fetch their own profile. |
+| `PUT` | `/api/v1/doctors/:id/schedule` | Super Admin | Replaces the weekly schedule, and optionally the slot length |
 
 ### Authentication
 

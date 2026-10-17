@@ -1,6 +1,7 @@
 import type { Response } from 'express';
 
 import { HTTP_STATUS } from '#app/constants/http.js';
+import type { Page } from '#app/utils/pagination.js';
 
 export type ResponseMeta = Record<string, unknown>;
 
@@ -28,6 +29,11 @@ export const sendResponse = (
 ): void => {
   const body: ApiResponse = { success, message, data, meta };
   res.status(status).json(body);
+};
+
+/** A page of results: the items in `data`, the page numbers and totals in `meta`. */
+export const sendPage = (res: Response, message: string, page: Page<unknown>): void => {
+  sendSuccess(res, { message, data: page.items, meta: { ...page.pagination } });
 };
 
 export const sendSuccess = (

@@ -1,8 +1,11 @@
 import type { Express } from 'express';
+import type { Types } from 'mongoose';
 import request from 'supertest';
 import type { Response } from 'supertest';
 import { z } from 'zod';
 
+import type { Role } from '#app/constants/roles.js';
+import { signAccessToken } from '#app/services/token.service.js';
 import { REFRESH_COOKIE_NAME } from '#app/utils/refresh-cookie.js';
 
 import { TEST_PASSWORD } from './factories.js';
@@ -14,6 +17,21 @@ export interface TestSession {
   accessToken: string;
   refreshCookie: string;
 }
+
+export const bearer = (accessToken: string): string => `Bearer ${accessToken}`;
+
+/** An Authorization header for a user, signed directly so tests don't need to log in first. */
+export const authorizationFor = (
+  user: { _id: Types.ObjectId; role: Role },
+  doctorId?: Types.ObjectId,
+): string =>
+  bearer(
+    signAccessToken({
+      id: user._id.toString(),
+      role: user.role,
+      ...(doctorId === undefined ? {} : { doctorId: doctorId.toString() }),
+    }),
+  );
 
 /** "emr_refresh=<token>" from a response, ready to send back in a Cookie header. */
 export const refreshCookieFrom = (response: Response): string => {
@@ -34,5 +52,3 @@ export const loginAs = async (
   const { accessToken } = dataOf(response, z.object({ accessToken: z.string() }));
   return { accessToken, refreshCookie: refreshCookieFrom(response) };
 };
-
-export const bearer = (accessToken: string): string => `Bearer ${accessToken}`;
