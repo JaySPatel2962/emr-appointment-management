@@ -4,6 +4,13 @@ export default defineConfig({
   test: {
     environment: 'node',
     restoreMocks: true,
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      // The process entry point and one-off scripts are exercised by running them, not by tests.
+      exclude: ['src/server.ts', 'src/scripts/**', 'src/**/*.d.ts'],
+      reporter: ['text-summary', 'html'],
+    },
     env: {
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',

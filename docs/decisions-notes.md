@@ -162,7 +162,7 @@ Every index exists because a query needs it, since each extra index slows writes
   - Queries use `.lean()` and a projection, and `Promise.all` runs the page query and the count together.
 - **Audit entries** for create (plus patient registration), update (field names only, never clinical text), arrive, complete and cancel.
 - **Patient search** reads the term as a patient code (exact match), the start of a mobile number (normalized, with `+91` dropped) or the start of a name. Each is answered from an index.
-- **Tests wait for the indexes,** as the server does at startup (see below).
+- **Tests wait for the indexes,** as the server does at startup. A unique-email test once passed only because the index build happened to finish first. The test setup now waits for every index before any test runs, and the suite passed three runs in a row.
 
 ## Phase 7: Real-time updates
 
@@ -181,4 +181,23 @@ Every index exists because a query needs it, since each extra index slows writes
 - **A failed broadcast never fails a request.** Publishing is wrapped and logged; the change is saved either way, and clients refetch when they reconnect.
 - **Events carry no clinical notes.** The payload is the appointment summary without its notes; screens fetch details over HTTP when they need them.
 - **Client input is untrusted.** Room requests are validated with zod, and the acknowledgement is called only if the client actually sent one, so a malformed message can't crash the server.
-- **Scaling.** With more than one API instance, add the Socket.IO Redis adapter, so a change made on one instance reaches clients connected to another. A unique-email test once passed only because the index build happened to finish first. The test setup now waits for every index before any test runs, and the suite passed three runs in a row.
+- **Scaling.** With more than one API instance, add the Socket.IO Redis adapter, so a change made on one instance reaches clients connected to another.
+
+## Phase 8: Tests and quality
+
+- **Test shape.** Pure functions (slot generation, schedule rules, clinic time, error mapping, sanitising) have unit tests. Everything else goes through the real HTTP API with supertest, against a real MongoDB (an in-memory replica set), so indexes, transactions and the order of middleware are all exercised.
+- **Concurrency is tested through the API, not just the model.**
+  - 10 parallel bookings of one slot: one 201 and nine 409s.
+  - 5 racing new-patient bookings: one patient record.
+  - Cancel, then 9 parallel rebookings: exactly one wins.
+  - 2 parallel cancellations: one 200 and one 409.
+- **RBAC is tested as a matrix:** every protected endpoint without a token, and every restricted endpoint against each role it excludes. The requests carry no body, which also proves that authorization runs before validation.
+- **An end-to-end test** runs a whole clinic day through the API with real logins, then checks the audit trail entry by entry.
+- **Determinism.**
+  - Time-dependent tests fake only `Date`, so MongoDB's own timers keep running.
+  - Each test file has its own database.
+  - Tests wait for indexes before running.
+  - The full suite passed three runs in a row.
+- **Coverage:** about 92% of statements and lines, and 86% of branches (`npm run test:coverage`). Only the process entry point and one-off scripts are excluded.
+- **Every commit passes the same gates:** Prettier, `tsc --noEmit`, ESLint `strictTypeChecked`, the whole test suite, and a production build.
+- **What the tests caught:** the `_id` override in `getDoctor` (Phase 4), the index-build race in the test setup (Phase 6), and a test factory that pointed appointments at patients that didn't exist (Phase 8).

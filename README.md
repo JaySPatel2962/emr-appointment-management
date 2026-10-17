@@ -2,7 +2,7 @@
 
 Appointment management module for an enterprise EMR system. It covers role-based access (Super Admin, Receptionist, Doctor), doctor schedules, dynamically generated slots, booking that is safe against double booking, and real-time scheduler updates.
 
-> **Status:** the backend (`server/`) is being built phase by phase. Design decisions are recorded in [`docs/decisions-notes.md`](docs/decisions-notes.md). The frontend hasn't been started.
+> **Status:** the backend (`server/`) is complete and tested (174 tests, about 92% line coverage). Design decisions are recorded in [`docs/decisions-notes.md`](docs/decisions-notes.md). The frontend hasn't been started.
 
 ## Tech stack
 
@@ -33,6 +33,7 @@ npm run dev
 | `npm run format` | Prettier |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Vitest unit and integration tests (in-memory MongoDB replica set, never Atlas) |
+| `npm run test:coverage` | The tests, plus a coverage report in `coverage/index.html` |
 
 ## Environment variables (server)
 
@@ -230,6 +231,23 @@ A sample appointment:
 ```
 
 Double booking is prevented by a unique index on `{ doctorId, date, slotStart }` that covers only active appointments, so a cancelled slot can be booked again. Every index, and the reason for it, is listed in [`docs/decisions-notes.md`](docs/decisions-notes.md).
+
+## Testing
+
+`npm test` runs two kinds of test. Unit tests cover the pure logic: slot generation, schedule rules, the clinic timezone, validation, error mapping and input sanitising. Integration tests go through the real HTTP API with supertest, against a real MongoDB: an in-memory replica set, so indexes and transactions behave as in production. Tests never touch Atlas.
+
+The integration tests prove the guarantees that matter:
+
+- **Double booking:**
+  - Of 10 simultaneous bookings of one slot, exactly 1 succeeds and 9 get 409.
+  - When new-patient bookings race for a slot, exactly one patient record is created.
+  - A cancelled slot can be booked again.
+  - Of two simultaneous cancellations, one succeeds and one gets 409.
+- **Authentication:** login, refresh token rotation, reuse detection that ends every session, and logout.
+- **Access control:** every protected endpoint answers 401 without a token, and every restricted endpoint answers 403 to each role it excludes.
+- **Doctor scoping** across doctors, slots and appointments.
+- **Real-time events** over a real Socket.IO connection.
+- **A whole clinic day** with real logins, from creating staff to completing a visit, including the audit trail.
 
 ## Project structure
 

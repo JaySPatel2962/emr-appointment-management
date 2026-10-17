@@ -86,13 +86,20 @@ interface AppointmentDoctor {
   name: string;
 }
 
-/** Inserts an appointment directly, without booking rules: for arranging test data only. */
-export const createAppointment = (
+/**
+ * Inserts an appointment directly, without booking rules: for arranging test data only. A real
+ * patient is created to match, so the copied patient fields agree with the patient record.
+ */
+export const createAppointment = async (
   doctor: AppointmentDoctor,
   overrides: Partial<Appointment> = {},
-) =>
-  AppointmentModel.create({
-    patientId: new Types.ObjectId(),
+) => {
+  const patient = await createPatient({
+    name: overrides.patientName ?? 'Asha Rao',
+    mobile: overrides.patientMobile ?? '9876543210',
+  });
+  return AppointmentModel.create({
+    patientId: patient._id,
     doctorId: doctor._id,
     departmentId: doctor.departmentId,
     date: '2030-01-15',
@@ -100,9 +107,10 @@ export const createAppointment = (
     slotEnd: '14:00',
     purpose: 'Follow-up',
     createdBy: new Types.ObjectId(),
-    patientCode: 'PAT-000001',
-    patientName: 'Asha Rao',
-    patientMobile: '9876543210',
+    patientCode: patient.patientCode,
+    patientName: patient.name,
+    patientMobile: patient.mobile,
     doctorName: doctor.name,
     ...overrides,
   });
+};
