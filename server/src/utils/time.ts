@@ -4,7 +4,7 @@ export const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 /** "YYYY-MM-DD". Use isValidDate() to also reject impossible dates such as 2026-02-30. */
 export const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-const MINUTES_PER_HOUR = 60;
+export const MINUTES_PER_HOUR = 60;
 
 /** A half-open time range [start, end) in "HH:mm". */
 export interface TimeRange {
@@ -13,6 +13,9 @@ export interface TimeRange {
 }
 
 export const isValidTime = (value: string): boolean => TIME_PATTERN.test(value);
+
+/** 0 = Sunday ... 6 = Saturday, for a "YYYY-MM-DD" calendar date. No timezone is involved. */
+export const dayOfWeek = (date: string): number => new Date(`${date}T00:00:00Z`).getUTCDay();
 
 export const isValidDate = (value: string): boolean => {
   if (!DATE_PATTERN.test(value)) {

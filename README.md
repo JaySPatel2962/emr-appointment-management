@@ -105,6 +105,7 @@ Errors have `success: false` and `data: null`. `meta.requestId` matches the `X-R
 | `GET` | `/api/v1/doctors` | any role | Doctors, filtered by `departmentId` and `search` and paginated. A doctor sees only themselves. |
 | `GET` | `/api/v1/doctors/:id` | any role | One doctor with their schedule. A doctor can only fetch their own profile. |
 | `PUT` | `/api/v1/doctors/:id/schedule` | Super Admin | Replaces the weekly schedule, and optionally the slot length |
+| `GET` | `/api/v1/slots?doctorId=&date=` | any role | A doctor's slots for one date, each `AVAILABLE`, `BOOKED` (with the appointment id) or `PAST`. Optional `departmentId`. Past dates are rejected, and a doctor can only see their own slots. |
 
 ### Authentication
 

@@ -7,7 +7,12 @@ import { isValidDate, TIME_PATTERN } from '#app/utils/time.js';
 export const MAX_PASSWORD_LENGTH = 72;
 const MIN_PASSWORD_LENGTH = 8;
 
-export const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'Must be a valid id');
+// Lowercased, so an id always compares equal to the same id read back from the database.
+export const objectIdSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-f\d]{24}$/, 'Must be a valid id');
 
 export const idParamsSchema = z.object({ id: objectIdSchema });
 

@@ -124,3 +124,14 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Doctor search** is a case-insensitive "contains" on name and specialization. It can't use an index, which is fine at the size of a doctor list. User input is escaped before it becomes a regex, so it can't inject patterns.
 - **Validators define the input types.** Services take `z.output<typeof schema>` types, so the shape of a request and the code that uses it can't drift apart.
 - **Middleware order on every route:** authenticate, then authorize, then validate. Callers without access get 401 or 403 and never see validation details.
+
+## Phase 5: Slot generation
+
+- **Slots are computed, never stored.** For the requested date, take that weekday's sessions, remove the breaks, and cut what is left into back-to-back slots of the doctor's slot length. A remainder too short for a whole slot is dropped. After a break that doesn't line up with the slot grid, slots restart right at the break's end, so no time is lost. Storing slots would mean regenerating them whenever a schedule changes, and keeping them in sync.
+- **`generateSlots` is a pure function**, with no database and no clock, so its edge cases are covered by fast unit tests: breaks at the start, middle and end of a session, a slot that ends exactly at a break, an off-grid break, a length that doesn't divide the session, sessions listed out of order, and a day off.
+- **Two queries per request, whatever the number of slots:** one for the doctor, one for the day's active appointments. Appointments are matched to slots by start time through a map, so there is no N+1.
+- **The clinic's clock.** "Today" and "now" come from luxon in `CLINIC_TIMEZONE`, so they are right whatever timezone the server runs in. The weekday comes from the calendar date alone. Asia/Kolkata has no daylight saving; luxon would also handle zones that do, although a slot falling inside a DST jump isn't treated specially.
+- **Past rules.** A date before the clinic's today is rejected with 422. On today, a slot whose start time has been reached is PAST, because a slot that has already started can't be booked.
+- **BOOKED wins over PAST.** A booked slot keeps its appointment id even after it starts, so a receptionist can still mark a late arrival.
+- **Booking reuses the generator** (`resolveBookableSlot`), so the API can never book a time that the slot grid wouldn't offer: not in a break, not on a day off, not off the grid, not in the past.
+- **Known limitation:** if a schedule changes after appointments were booked, an appointment outside the new schedule no longer appears in the slot grid. It is still in the appointment list.

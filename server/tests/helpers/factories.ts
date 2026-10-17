@@ -1,7 +1,9 @@
-import type { Types } from 'mongoose';
+import { Types } from 'mongoose';
 
 import { ROLES } from '#app/constants/roles.js';
 import type { Role } from '#app/constants/roles.js';
+import { AppointmentModel } from '#app/models/appointment.model.js';
+import type { Appointment } from '#app/models/appointment.model.js';
 import { DepartmentModel } from '#app/models/department.model.js';
 import { DoctorModel } from '#app/models/doctor.model.js';
 import { UserModel } from '#app/models/user.model.js';
@@ -64,3 +66,30 @@ export const createDoctor = async (options: DoctorOptions = {}) => {
   });
   return { user, doctor };
 };
+
+interface AppointmentDoctor {
+  _id: Types.ObjectId;
+  departmentId: Types.ObjectId;
+  name: string;
+}
+
+/** Inserts an appointment directly, without booking rules: for arranging test data only. */
+export const createAppointment = (
+  doctor: AppointmentDoctor,
+  overrides: Partial<Appointment> = {},
+) =>
+  AppointmentModel.create({
+    patientId: new Types.ObjectId(),
+    doctorId: doctor._id,
+    departmentId: doctor.departmentId,
+    date: '2030-01-15',
+    slotStart: '13:30',
+    slotEnd: '14:00',
+    purpose: 'Follow-up',
+    createdBy: new Types.ObjectId(),
+    patientCode: 'PAT-000001',
+    patientName: 'Asha Rao',
+    patientMobile: '9876543210',
+    doctorName: doctor.name,
+    ...overrides,
+  });
