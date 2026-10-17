@@ -162,4 +162,23 @@ Every index exists because a query needs it, since each extra index slows writes
   - Queries use `.lean()` and a projection, and `Promise.all` runs the page query and the count together.
 - **Audit entries** for create (plus patient registration), update (field names only, never clinical text), arrive, complete and cancel.
 - **Patient search** reads the term as a patient code (exact match), the start of a mobile number (normalized, with `+91` dropped) or the start of a name. Each is answered from an index.
-- **Tests wait for the indexes,** as the server does at startup. A unique-email test once passed only because the index build happened to finish first. The test setup now waits for every index before any test runs, and the suite passed three runs in a row.
+- **Tests wait for the indexes,** as the server does at startup (see below).
+
+## Phase 7: Real-time updates
+
+- **Socket.IO runs on the API's HTTP server and port.** That keeps one deployment unit, and CORS is limited to `CLIENT_URL`, as for the REST API.
+- **Authentication happens in the handshake,** with the same access token (`auth: { token }`), and a connection without a valid token is refused. A socket can outlive its token, so the server disconnects it when the token expires and the client reconnects with a fresh one. A deactivated user therefore loses live updates within the token's lifetime, too.
+- **One room per doctor and date** (`scheduler:{doctorId}:{date}`). A scheduler screen shows one doctor's day, so it receives only that day's changes: no firehose to filter on the client, and no other doctor's data reaches it.
+  - Doctors can only join their own rooms, checked on join.
+  - Super Admins are put in an `admin` room that receives everything.
+- **Events are sent only after the write succeeds.** The appointment service publishes:
+  - `appointment:created`
+  - `appointment:updated`, for purpose or notes changes, arrival and completion
+  - `appointment:cancelled`
+
+  A failed or rejected change announces nothing (tested).
+- **The emitter is injected (a port).** The service depends on a small `AppointmentEventEmitter` interface that is silent by default. The server plugs in the Socket.IO implementation at startup, and tests plug in a mock. The service knows nothing about Socket.IO, and HTTP-only tests need no socket server.
+- **A failed broadcast never fails a request.** Publishing is wrapped and logged; the change is saved either way, and clients refetch when they reconnect.
+- **Events carry no clinical notes.** The payload is the appointment summary without its notes; screens fetch details over HTTP when they need them.
+- **Client input is untrusted.** Room requests are validated with zod, and the acknowledgement is called only if the client actually sent one, so a malformed message can't crash the server.
+- **Scaling.** With more than one API instance, add the Socket.IO Redis adapter, so a change made on one instance reaches clients connected to another. A unique-email test once passed only because the index build happened to finish first. The test setup now waits for every index before any test runs, and the suite passed three runs in a row.

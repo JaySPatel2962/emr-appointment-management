@@ -60,6 +60,14 @@ export const verifyAccessToken = (token: string): AuthUser => {
   return { id: sub, role, ...(doctorId === undefined ? {} : { doctorId }) };
 };
 
+/** When an access token expires. Use only on a token that verifyAccessToken has accepted. */
+export const accessTokenExpiry = (token: string): Date | undefined => {
+  const claims = jwt.decode(token);
+  return typeof claims === 'object' && claims?.exp !== undefined
+    ? new Date(claims.exp * MS_PER_SECOND)
+    : undefined;
+};
+
 /** A random jti makes every refresh token unique, even two issued in the same second. */
 export const signRefreshToken = (userId: string): SignedRefreshToken => {
   const ttlSeconds = env.REFRESH_TOKEN_TTL_DAYS * SECONDS_PER_DAY;

@@ -155,6 +155,28 @@ Send the access token as `Authorization: Bearer <accessToken>`. It lasts 15 minu
 
 The seed script also reads `SEED_ADMIN_NAME`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` and `SEED_DEPARTMENTS` (see `.env.example`).
 
+## Real-time updates
+
+Socket.IO runs on the API's own port. Connect with the access token, then join the scheduler you are showing:
+
+```js
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:5000', { auth: { token: accessToken } });
+
+socket.emit('scheduler:join', { doctorId, date: '2026-10-20' }, (result) => {
+  // { ok: true, room } or { ok: false, error }
+});
+socket.on('appointment:created', (appointment) => {});
+socket.on('appointment:updated', (appointment) => {});
+socket.on('appointment:cancelled', (appointment) => {});
+```
+
+- **Rooms:** there is one room per doctor and date, named `scheduler:{doctorId}:{date}`. Send `scheduler:leave` when the screen moves to another doctor or date.
+- **Who can join what:** doctors can only join their own scheduler. Super Admins receive every change without joining anything.
+- **Events:** each event carries the appointment without its notes, and is sent only after the change has been saved.
+- **Token expiry:** the connection closes when the access token expires. Reconnect with a fresh one, for example after calling `/auth/refresh`.
+
 ## Database design
 
 MongoDB with Mongoose. How the collections relate:

@@ -4,6 +4,9 @@ import { createApp } from '#app/app.js';
 import { connectDb, disconnectDb } from '#app/config/db.js';
 import { env } from '#app/config/env.js';
 import { logger } from '#app/config/logger.js';
+import { setAppointmentEventEmitter } from '#app/services/appointment-events.js';
+import { createSocketAppointmentEmitter } from '#app/sockets/appointment-broadcaster.js';
+import { createSocketServer } from '#app/sockets/index.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -11,6 +14,8 @@ const start = async (): Promise<void> => {
   await connectDb();
 
   const server = createServer(createApp());
+  const io = createSocketServer(server);
+  setAppointmentEventEmitter(createSocketAppointmentEmitter(io));
   server.listen(env.PORT, () => {
     logger.info({ port: env.PORT, env: env.NODE_ENV }, 'API listening');
   });
@@ -29,15 +34,19 @@ const start = async (): Promise<void> => {
       process.exit(1);
     }, SHUTDOWN_TIMEOUT_MS).unref();
 
-    // Stop accepting connections, let in-flight requests finish, then close the database.
-    server.close(() => {
+    // Disconnect every socket and stop accepting requests; once in-flight requests have
+    // finished and the HTTP server is closed, close the database.
+    void io.close((error) => {
+      if (error) {
+        logger.error({ err: error }, 'Error while closing the HTTP server');
+      }
       disconnectDb()
         .then(() => {
           logger.info('Shutdown complete');
           process.exit(0);
         })
-        .catch((error: unknown) => {
-          logger.error({ err: error }, 'Error while closing MongoDB');
+        .catch((dbError: unknown) => {
+          logger.error({ err: dbError }, 'Error while closing MongoDB');
           process.exit(1);
         });
     });

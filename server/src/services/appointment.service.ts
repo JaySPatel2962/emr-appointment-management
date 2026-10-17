@@ -5,10 +5,12 @@ import { APPOINTMENT_STATUS, STATUS_TRANSITIONS } from '#app/constants/appointme
 import type { AppointmentStatus } from '#app/constants/appointment.js';
 import { AUDIT_ACTIONS, AUDIT_ENTITIES } from '#app/constants/audit.js';
 import type { AuditAction } from '#app/constants/audit.js';
+import { APPOINTMENT_EVENTS } from '#app/constants/events.js';
 import { AppointmentModel } from '#app/models/appointment.model.js';
 import type { Appointment } from '#app/models/appointment.model.js';
 import { DoctorModel } from '#app/models/doctor.model.js';
 import { PatientModel } from '#app/models/patient.model.js';
+import { publishAppointmentEvent } from '#app/services/appointment-events.js';
 import { recordAudit } from '#app/services/audit.service.js';
 import {
   createPatientRecord,
@@ -261,7 +263,9 @@ export const createAppointment = async (
     actor,
     metadata: { doctorId: input.doctorId, date: input.date, slotStart: slot.start },
   });
-  return toAppointmentDto(booking.appointment);
+  const appointment = toAppointmentDto(booking.appointment);
+  publishAppointmentEvent(APPOINTMENT_EVENTS.CREATED, appointment);
+  return appointment;
 };
 
 const findDoctorIdsByName = async (name: string): Promise<Types.ObjectId[]> => {
@@ -388,7 +392,9 @@ export const updateAppointment = async (
     actor,
     metadata: { fields: Object.keys(changes) },
   });
-  return toAppointmentDto(updated);
+  const appointment = toAppointmentDto(updated);
+  publishAppointmentEvent(APPOINTMENT_EVENTS.UPDATED, appointment);
+  return appointment;
 };
 
 /**
@@ -417,7 +423,14 @@ const changeStatus = async (
     entityId: updated._id,
     actor,
   });
-  return toAppointmentDto(updated);
+  const appointment = toAppointmentDto(updated);
+  publishAppointmentEvent(
+    target === APPOINTMENT_STATUS.CANCELLED
+      ? APPOINTMENT_EVENTS.CANCELLED
+      : APPOINTMENT_EVENTS.UPDATED,
+    appointment,
+  );
+  return appointment;
 };
 
 export const markArrived = (id: string, actor: AuthUser): Promise<AppointmentDto> =>
