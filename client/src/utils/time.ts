@@ -18,3 +18,17 @@ export const minutesToTime = (minutes: number): string => {
 
 /** "09:00" and "09:15" -> "09:00–09:15" (an en dash, as a range). */
 export const formatTimeRange = (start: string, end: string): string => `${start}–${end}`;
+
+export interface TimeSpan {
+  start: string;
+  end: string;
+}
+
+/** True when two half-open ranges share a minute; 09:00-12:00 and 12:00-13:00 only touch. */
+export const rangesOverlap = (a: TimeSpan, b: TimeSpan): boolean =>
+  timeToMinutes(a.start) < timeToMinutes(b.end) && timeToMinutes(b.start) < timeToMinutes(a.end);
+
+/** True when `inner` lies entirely within `outer`. */
+export const rangeContains = (outer: TimeSpan, inner: TimeSpan): boolean =>
+  timeToMinutes(outer.start) <= timeToMinutes(inner.start) &&
+  timeToMinutes(inner.end) <= timeToMinutes(outer.end);

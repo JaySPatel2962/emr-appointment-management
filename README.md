@@ -4,7 +4,7 @@ Appointment management module for an enterprise EMR system. It covers role-based
 
 > **Status:**
 > - The backend (`server/`) is complete and tested: 174 tests, about 92% line coverage.
-> - The frontend (`client/`) is in progress. Its tooling is set up, and the screens are being built in phases.
+> - The frontend (`client/`) has every screen: login, dashboard, scheduler, booking, appointment list, and staff and schedules. Performance work and end-to-end tests are next.
 > - Design decisions are recorded in [`docs/decisions-notes.md`](docs/decisions-notes.md).
 
 ## Tech stack
@@ -68,6 +68,17 @@ The server validates these at startup and refuses to start if any are invalid, n
 | `RATE_LIMIT_WINDOW_MS` | Rate limit window | `900000` (15 minutes) |
 | `RATE_LIMIT_MAX` | Requests per client IP per window, across the API | `300` |
 | `LOGIN_RATE_LIMIT_MAX` | Failed logins per client IP per window | `10` |
+
+## Frontend overview
+
+| Screen | Who | What it does |
+| --- | --- | --- |
+| Login | everyone | Email and password. A reload keeps you signed in, through a silent refresh with the httpOnly cookie. |
+| Dashboard | everyone | Today by status (still to come, waiting, completed, cancelled), who is waiting and who is next. A doctor sees only their own day; a Super Admin also sees each doctor's load. |
+| Scheduler | everyone | One doctor's day as a sheet of slots, laid out by session, with breaks shown. Available slots link to booking, booked ones open the appointment, and past ones are hatched. It updates live over Socket.IO. |
+| Book appointment | Super Admin, Receptionist | Choose a doctor, day and free slot, then find the patient by ID, mobile or name, or register a new one. A slot someone else just took is caught (409) and the slots refresh. |
+| Appointments | everyone | Server-side paging, sorting and filters (patient, mobile, doctor, department, status, dates), kept in the URL. Row actions depend on the role: check in, complete, edit, cancel. |
+| Staff and schedules | Super Admin | Add doctors and receptionists, and edit each doctor's working days, sessions, breaks and slot length. |
 
 ## Getting started (client)
 

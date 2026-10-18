@@ -70,6 +70,8 @@ export default defineConfig(
       ],
       // `onClick={() => setOpen(true)}` is the idiomatic React handler; braces would add noise.
       '@typescript-eslint/no-confusing-void-expression': ['error', { ignoreArrowShorthand: true }],
+      // Card-style radio labels nest their text one level deeper than the default depth of 2.
+      'jsx-a11y-x/label-has-associated-control': ['error', { depth: 3 }],
       // The strict preset drops the plugin's allow-list for WAI-ARIA Authoring Practices patterns,
       // such as the date picker's <table role="grid">. These are the recommended preset's options.
       'jsx-a11y-x/no-noninteractive-element-to-interactive-role': [

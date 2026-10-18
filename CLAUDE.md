@@ -62,7 +62,9 @@ Enterprise EMR appointment management module (MERN). Code quality and architectu
 - Styling:
   - Use Tailwind utilities with the design tokens in `src/styles/index.css` (`@theme`).
   - Component variants are typed maps, and classes are joined with `cn()`.
-  - No inline styles.
+  - Don't pass a `className` that competes with a component's own classes. Add a variant instead.
+  - A component that appears at more than one width uses container queries (`@container`, `@3xl:`).
+  - No inline styles, except data-driven sizes such as a chart bar's width.
 - Every page has loading, empty and error states, and works at 375px, 768px and 1280px wide.
 - Use `React.memo`, `useCallback` and `useMemo` only where they measurably help, such as slot grid cells and table rows. Record each one in `docs/decisions-notes.md`.
 - Dates and times are the API's clinic-timezone strings (`"YYYY-MM-DD"`, `"HH:mm"`). Never parse them with `new Date()` in the browser's timezone. Use the helpers in `src/utils/date.ts`, which work on UTC midnight, and `useClinicClock()` for "today" and "now" on the clinic's clock.
@@ -197,8 +199,13 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
     - the responsive shell
     - the error boundary, toasts, and the login, 403 and 404 pages
   - 2 reusable components, in `components/ui`: Button, ButtonLink, Input, PasswordInput, Textarea, Select, Checkbox, RadioGroup, DatePicker, Dialog, Modal, ConfirmDialog, Table, Pagination, Badge, Spinner, Skeleton, EmptyState, Alert, ErrorMessage, FormField, Tabs, Panel, DetailList
+  - 3 pages:
+    - dashboard: role-aware, from the existing list endpoint
+    - scheduler: a live day sheet
+    - booking: an existing or new patient, with 409 handling
+    - appointment list: URL filters and row actions
+    - staff and schedules: the schedule editor
 - Next:
-  - 3 pages
   - 4 performance and quality
   - 5 Playwright end-to-end tests against the real API
 - Design decisions: the Frontend sections of `docs/decisions-notes.md`
@@ -215,6 +222,11 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
 - `services/socket.ts` holds one shared, reference-counted socket. Its `auth` callback supplies a fresh token on every connection attempt.
 - Toasts are an external store too: call `toast.success(...)` from anywhere.
 - Routes live in `app/router.tsx`, and the role lists are `ROUTE_ACCESS` in `constants/routes.ts`. The nav, in `app/navigation.ts`, uses the same lists.
+- Data features: `departments`, `doctors`, `patients`, `slots` and `appointments`, each with `api.ts` and query keys.
+  - `appointments/cache.ts` has `syncAppointment()`, which every change goes through, whether a mutation's response or a socket event.
+  - `appointments/utils/permissions.ts` decides which row actions a role gets.
+- The scheduler and the booking form share `useSlotSearch()`, which keeps `?doctor&date&slot` in the URL, and `useSchedulerRoom()`, the live room.
+- Schedule rules for the editor live in `admin/utils/schedule-rules.ts`, mirroring the server's `utils/schedule.ts`.
 
 ## NOTE
 - Never use niro for anything

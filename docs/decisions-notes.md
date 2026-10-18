@@ -354,6 +354,80 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Lint.** The strict accessibility preset drops the plugin's allow-list for WAI-ARIA Authoring Practices patterns, such as `<table role="grid">`. The recommended preset's mapping is restored in `eslint.config.ts`.
 - **A file-name trap on Windows.** `pagination.ts` next to `Pagination.tsx` can resolve to the wrong file on a case-insensitive file system, so the helper is named `page-items.ts`.
 
+## Frontend Phase 3: Pages
+
+### Data
+
+- **One data layer per feature.** Each feature has an `api.ts` of typed calls and a query-key factory (`appointmentKeys.list(params)`, `slotKeys.day(doctorId, date)`), so a key is never typed by hand and every filter combination is its own cache entry.
+  - Queries that depend on a choice not yet made use `skipToken`, which keeps their types sound without `!`.
+  - A doctor already loaded in a list shows straight away (`placeholderData`) while their detail loads.
+  - Paging, filtering and patient search keep the previous results on screen while the next ones load (`keepPreviousData`), so nothing jumps.
+- **One function updates the cache after a change: `syncAppointment()`.** It runs both on a mutation's response and on a Socket.IO event, and running it twice for the same change is harmless.
+  - It updates the doctor's slot grid for that day slot by slot. Only the changed slot gets a new object, so only its tile re-renders.
+  - It updates the day lists behind the scheduler and the dashboard.
+  - It updates the appointment's detail, keeping the full patient record and the notes, which socket events never carry.
+  - Paged lists are only invalidated: a change can move a row to another page or out of the filter, so patching them in place could show a wrong page.
+- **Live updates, for the scheduler and the booking form.**
+  - The screen joins the room `scheduler:{doctorId}:{date}`, and leaves it when the doctor or date changes or the screen closes.
+  - Super Admins receive every doctor's events, so each event is checked against the doctor and date on screen.
+  - After a reconnect the day is refetched, since changes made while offline were never announced.
+  - Each change is read out through an `aria-live` region ("10:15 was just booked for Asha Rao"), and the tile that changed glows once.
+  - A slot chosen in the booking form that someone else books meanwhile is flagged before submitting.
+- **The clinic's clock in the browser.**
+  - A slot the API sent as AVAILABLE shows as PAST the moment its time comes, by the server's own rule (`start <= now`), using one shared minute ticker. An open grid therefore stays right for hours.
+  - A refetch every 60 seconds catches anything that live updates miss.
+
+### Screens
+
+- **The day sheet.** The slot grid is laid out by the doctor's sessions ("Morning, 08:00–13:00"), from that weekday's schedule.
+  - A break inside a session is drawn between its slots; a lunch between two sessions sits between them. A day never shows a slot inside a break. The layout is a pure, tested function.
+  - The three states are told apart by more than color:
+    - AVAILABLE is a link to the booking form, for the front desk only.
+    - BOOKED is a button that opens the appointment, with the patient's name and status, and an ink bar on its left edge.
+    - PAST is hatched and can't be focused.
+  - Tiles are memoized.
+- **Booking.** The doctor, date and slot live in the URL, through the same hook the scheduler uses, so a slot in the scheduler is a link that fills the form in. The form itself holds the patient and the visit.
+  - Both kinds of patient keep their fields in the form, so switching between "Existing patient" and "New patient" loses nothing. Only the chosen kind is validated (zod `superRefine`), and all errors show at once.
+  - Patient search waits 300 ms after typing stops and starts at two characters. When nothing matches, "Register a new patient" fills in what was typed: digits go to the mobile number, words to the name.
+  - A 409 or 422 (the slot was just taken, or has started) keeps everything typed. The slots are refetched, the chosen time is cleared, and an alert explains what happened.
+  - Field errors from a 400 appear on their own fields.
+  - After a successful booking, a toast confirms it and the scheduler opens on that day, where the slot is already BOOKED.
+- **Appointment list.**
+  - The page, sort and filters live in the URL, parsed by zod with `.catch()` defaults, so a hand-edited URL falls back instead of breaking. Default values are left out of the URL, and filter changes replace the history entry.
+  - Text filters wait 350 ms after typing stops; selects and dates apply at once.
+  - Sorting is done from the column headers (`aria-sort`), or from one "Sort by" choice on narrow screens, where the headers are hidden.
+  - A page beyond the end, such as an old link after the list shrank, offers to go back to page 1.
+  - Row actions come from `permissionsFor(user, appointment)`, a tested mirror of the API's rules, so only actions that would succeed are offered:
+    - check in
+    - complete
+    - edit purpose and notes (notes only, for doctors)
+    - cancel, through the confirm dialog
+  - Each action button reads its own pending state through `useMutationState`, so a running action doesn't re-render the table.
+  - The edit form sends only the fields that changed, and never `purpose` for a doctor. A refused change (409) shows the server's message and refetches.
+- **One dialog at a time.** Details, edit and cancel are states of one controller. "Edit details" in the details dialog swaps dialogs instead of stacking them.
+- **Dashboard.** It uses `GET /appointments` for today, all pages of 100; no new endpoint was needed. A pure, tested `summarizeDay` gives:
+  - counts by status
+  - who is waiting, who is next and who is running late
+  - each doctor's load
+
+  It follows the dataviz guidance:
+  - Headline numbers are stat tiles, not charts, with proportional figures at that size.
+  - Part-to-whole is one thin stacked bar in workflow order (completed, waiting, still to come), with 2px gaps and a legend. The bar is hidden from screen readers because the numbers are in text, and each segment has a hover title.
+  - The bar's colors are chart-only steps of the status hues. They were run through the dataviz palette validator; the original text colors failed its lightness band. The adjacent pairs now pass the colour-blindness check (worst Delta E 8.7, protanopia).
+  - Super Admins also get a per-doctor table that lists every doctor, even one with nothing booked. Its bars are scaled to the busiest doctor, so they compare across rows, and it doubles as the chart's text equivalent.
+
+  The dashboard refreshes every 60 seconds. At a much larger scale, a summary endpoint would be cheaper than fetching the whole day.
+- **Staff and schedules.** The tab and the chosen doctor are in the URL.
+  - The schedule editor shows all seven days, each switched on or off, with field arrays for sessions and breaks. "Use a standard week" fills in Monday to Friday, 09:00–12:00 and 13:00–17:00 with lunch in between.
+  - `findScheduleProblems` mirrors the server's schedule rules and is unit-tested. Each problem (overlapping sessions, a break outside working hours) shows on the exact range it is about.
+  - An API error on `body.schedule.N` is mapped from the N-th working day back to the editor's row.
+  - Creating a doctor uses three separately typed forms (account, profile, schedule), validated together, with focus on the first problem in reading order. A typed form per part means no casts; the alternative was RHF's form context.
+  - A taken email (409) shows on the email field. Saving a schedule refetches every cached slot grid, since the slots themselves change.
+- **Container queries where a component lives in more than one width.**
+  - The table switches between cards and rows at a container width of 48rem, not at a screen width, because the same table sits beside the sidebar on a desktop and alone on a tablet.
+  - The doctor, department and date fields stack in the booking form's narrow column, and line up in the scheduler's wide panel.
+- **The one inline style:** the data-driven width of a chart bar, which no static class can express.
+
 ## Libraries and why
 
 | Library | Why |

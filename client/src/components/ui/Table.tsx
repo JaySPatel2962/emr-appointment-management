@@ -21,10 +21,12 @@ export interface TableColumn<T, S extends string = string> {
   align?: 'start' | 'end' | undefined;
   /** Layout classes for this column's cells on wide screens, such as a width. */
   className?: string | undefined;
-  /** On phones each row is a card, and this cell is its heading, shown without a label. */
+  /** On phones each row is a card, and this cell is its heading: first, and without a label. */
   primary?: boolean | undefined;
   /** On phones, show the cell without its column label (for the actions column). */
   hideLabelOnMobile?: boolean | undefined;
+  /** Shows the column only on extra-wide screens, for detail that can wait. */
+  visibleFrom?: 'xl' | undefined;
 }
 
 export interface TableProps<T, S extends string = string> {
@@ -49,6 +51,13 @@ const SORT_NAMES: Readonly<Record<SortOrder, 'ascending' | 'descending'>> = {
   desc: 'descending',
 };
 
+// A row is a card (a flex column) on phones and a table row from the md breakpoint up.
+const ROW_CLASSES =
+  'flex flex-col border-b border-line px-4 py-3 last:border-b-0 @3xl:table-row @3xl:p-0';
+
+const cellDisplay = (visibleFrom: TableColumn<never>['visibleFrom']): string =>
+  visibleFrom === 'xl' ? 'hidden @6xl:table-cell' : 'flex @3xl:table-cell';
+
 const HeaderCell = <T, S extends string>({
   column,
   sort,
@@ -68,7 +77,8 @@ const HeaderCell = <T, S extends string>({
       scope="col"
       aria-sort={sortKey === undefined ? undefined : active ? SORT_NAMES[sort.order] : 'none'}
       className={cn(
-        'px-4 py-2.5 text-xs font-semibold text-ink-muted',
+        'px-4 py-2.5 text-xs font-semibold whitespace-nowrap text-ink-muted',
+        column.visibleFrom === 'xl' ? 'hidden @6xl:table-cell' : 'table-cell',
         column.align === 'end' && 'text-right',
         column.className,
       )}
@@ -99,22 +109,20 @@ const RowView = <T, S extends string>({
   row: T;
   columns: readonly TableColumn<T, S>[];
 }) => (
-  <tr
-    role="row"
-    className="block border-b border-line px-4 py-3 last:border-b-0 md:table-row md:p-0"
-  >
+  <tr role="row" className={ROW_CLASSES}>
     {columns.map((column) => (
       <td
         key={column.id}
         role="cell"
         data-label={column.header}
         className={cn(
-          'flex items-start justify-between gap-4 py-1 text-sm text-ink md:table-cell md:px-4 md:py-3 md:align-middle',
+          cellDisplay(column.visibleFrom),
+          'items-start justify-between gap-4 py-1 text-sm text-ink @3xl:px-4 @3xl:py-3 @3xl:align-middle',
           !column.primary &&
             !column.hideLabelOnMobile &&
-            'before:shrink-0 before:font-semibold before:text-ink-muted before:content-[attr(data-label)] md:before:content-none',
-          column.primary && 'text-base max-md:pb-2',
-          column.align === 'end' && 'md:text-right',
+            'before:shrink-0 before:font-semibold before:text-ink-muted before:content-[attr(data-label)] @3xl:before:content-none',
+          column.primary && 'text-base @max-3xl:order-first @max-3xl:pb-2',
+          column.align === 'end' && '@3xl:text-right',
           column.className,
         )}
       >
@@ -129,7 +137,8 @@ const RowView = <T, S extends string>({
 const Row = memo(RowView) as typeof RowView;
 
 /**
- * A data table that turns into a list of cards on phones: one DOM, restyled. The explicit ARIA
+ * A data table that turns into a list of cards when its container is narrower than 48rem: one
+ * DOM, restyled. A container query, not a viewport one, so it adapts to the space it is given. The explicit ARIA
  * roles keep the table semantics that some browsers drop when a table's display changes.
  */
 export const Table = <T, S extends string = string>({
@@ -146,36 +155,32 @@ export const Table = <T, S extends string = string>({
 }: TableProps<T, S>) => (
   <div
     className={cn(
-      'overflow-hidden rounded-xl border border-line bg-paper transition-opacity',
+      '@container overflow-hidden rounded-xl border border-line bg-paper transition-opacity',
       refreshing && 'opacity-70',
     )}
   >
     <table
       role="table"
       aria-busy={loading || refreshing || undefined}
-      className="block w-full border-collapse text-left md:table"
+      className="block w-full border-collapse text-left @3xl:table"
     >
       <caption className="sr-only">{caption}</caption>
-      <thead role="rowgroup" className="max-md:sr-only">
+      <thead role="rowgroup" className="@max-3xl:sr-only">
         <tr role="row" className="border-b border-line bg-canvas/60">
           {columns.map((column) => (
             <HeaderCell key={column.id} column={column} sort={sort} onSortChange={onSortChange} />
           ))}
         </tr>
       </thead>
-      <tbody role="rowgroup" className="block md:table-row-group">
+      <tbody role="rowgroup" className="block @3xl:table-row-group">
         {loading
           ? Array.from({ length: skeletonRows }, (_, index) => (
-              <tr
-                key={index}
-                role="row"
-                className="block border-b border-line px-4 py-3 last:border-b-0 md:table-row md:p-0"
-              >
+              <tr key={index} role="row" className={ROW_CLASSES}>
                 {columns.map((column) => (
                   <td
                     key={column.id}
                     role="cell"
-                    className="block py-1.5 md:table-cell md:px-4 md:py-3.5"
+                    className={cn(cellDisplay(column.visibleFrom), 'py-1.5 @3xl:px-4 @3xl:py-3.5')}
                   >
                     <Skeleton className="h-4 w-full max-w-36" />
                   </td>
@@ -184,8 +189,8 @@ export const Table = <T, S extends string = string>({
             ))
           : null}
         {!loading && rows.length === 0 ? (
-          <tr role="row" className="block md:table-row">
-            <td role="cell" colSpan={columns.length} className="block md:table-cell">
+          <tr role="row" className="block @3xl:table-row">
+            <td role="cell" colSpan={columns.length} className="block @3xl:table-cell">
               {empty}
             </td>
           </tr>
