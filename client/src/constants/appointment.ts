@@ -47,7 +47,3 @@ export const APPOINTMENT_SORT_FIELDS = [
 ] as const;
 
 export type AppointmentSortField = (typeof APPOINTMENT_SORT_FIELDS)[number];
-
-export const SORT_ORDERS = ['asc', 'desc'] as const;
-
-export type SortOrder = (typeof SORT_ORDERS)[number];

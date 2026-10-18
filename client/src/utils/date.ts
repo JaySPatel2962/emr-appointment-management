@@ -89,6 +89,7 @@ const formatters = {
     day: 'numeric',
     month: 'short',
   }),
+  weekday: new Intl.DateTimeFormat(LOCALE, { timeZone: 'UTC', weekday: 'short' }),
   month: new Intl.DateTimeFormat(LOCALE, { timeZone: 'UTC', month: 'long', year: 'numeric' }),
   timestamp: new Intl.DateTimeFormat(LOCALE, {
     timeZone: env.clinicTimezone,
@@ -110,6 +111,10 @@ export const formatDate = (date: string): string => formatters.medium.format(toU
 /** "Mon, 19 Oct" */
 export const formatDateShort = (date: string): string =>
   formatters.weekdayShort.format(toUtcDate(date));
+
+/** "Mon, 19 Oct 2026". (en-IN's own pattern with a weekday puts a comma before the year.) */
+export const formatDateWithWeekday = (date: string): string =>
+  `${formatters.weekday.format(toUtcDate(date))}, ${formatDate(date)}`;
 
 /** "October 2026" */
 export const formatMonth = (date: string): string => formatters.month.format(toUtcDate(date));

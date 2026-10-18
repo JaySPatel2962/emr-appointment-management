@@ -70,6 +70,19 @@ export default defineConfig(
       ],
       // `onClick={() => setOpen(true)}` is the idiomatic React handler; braces would add noise.
       '@typescript-eslint/no-confusing-void-expression': ['error', { ignoreArrowShorthand: true }],
+      // The strict preset drops the plugin's allow-list for WAI-ARIA Authoring Practices patterns,
+      // such as the date picker's <table role="grid">. These are the recommended preset's options.
+      'jsx-a11y-x/no-noninteractive-element-to-interactive-role': [
+        'error',
+        {
+          ul: ['listbox', 'menu', 'menubar', 'radiogroup', 'tablist', 'tree', 'treegrid'],
+          ol: ['listbox', 'menu', 'menubar', 'radiogroup', 'tablist', 'tree', 'treegrid'],
+          li: ['menuitem', 'menuitemradio', 'menuitemcheckbox', 'option', 'row', 'tab', 'treeitem'],
+          table: ['grid'],
+          td: ['gridcell'],
+          fieldset: ['radiogroup', 'presentation'],
+        },
+      ],
       'no-restricted-globals': [
         'error',
         { name: 'localStorage', message: NO_BROWSER_STORAGE },

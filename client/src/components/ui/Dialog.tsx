@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/utils/cn';
 
 export type DialogPlacement = 'center' | 'side';
+export type DialogSize = 'md' | 'lg';
 
 export interface DialogProps {
   open: boolean;
@@ -14,14 +15,15 @@ export interface DialogProps {
   describedBy?: string | undefined;
   /** `side` slides in from the left edge, for the navigation menu on small screens. */
   placement?: DialogPlacement | undefined;
+  /** Width of a centered dialog. */
+  size?: DialogSize | undefined;
   id?: string | undefined;
   children: ReactNode;
 }
 
-const PLACEMENTS: Readonly<Record<DialogPlacement, string>> = {
-  center:
-    'm-auto w-[calc(100%-2rem)] max-w-lg rounded-xl max-h-[calc(100dvh-2rem)] overflow-y-auto',
-  side: 'mr-auto ml-0 h-dvh max-h-none w-72 max-w-[85vw] rounded-r-xl',
+const CENTER_SIZES: Readonly<Record<DialogSize, string>> = {
+  md: 'max-w-lg',
+  lg: 'max-w-2xl',
 };
 
 /**
@@ -34,6 +36,7 @@ export const Dialog = ({
   labelledBy,
   describedBy,
   placement = 'center',
+  size = 'md',
   id,
   children,
 }: DialogProps) => {
@@ -79,7 +82,12 @@ export const Dialog = ({
       aria-describedby={describedBy}
       className={cn(
         'border border-line bg-paper p-0 text-ink shadow-overlay backdrop:bg-ink/45 open:animate-enter',
-        PLACEMENTS[placement],
+        placement === 'side'
+          ? 'mr-auto ml-0 h-dvh max-h-none w-72 max-w-[85vw] rounded-r-xl'
+          : cn(
+              'm-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] rounded-xl',
+              CENTER_SIZES[size],
+            ),
       )}
     >
       {open ? children : null}

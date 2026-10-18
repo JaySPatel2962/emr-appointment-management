@@ -196,8 +196,8 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
     - route guards and lazy routes
     - the responsive shell
     - the error boundary, toasts, and the login, 403 and 404 pages
+  - 2 reusable components, in `components/ui`: Button, ButtonLink, Input, PasswordInput, Textarea, Select, Checkbox, RadioGroup, DatePicker, Dialog, Modal, ConfirmDialog, Table, Pagination, Badge, Spinner, Skeleton, EmptyState, Alert, ErrorMessage, FormField, Tabs, Panel, DetailList
 - Next:
-  - 2 reusable components
   - 3 pages
   - 4 performance and quality
   - 5 Playwright end-to-end tests against the real API

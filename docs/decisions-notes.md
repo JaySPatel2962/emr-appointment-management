@@ -328,6 +328,32 @@ Every index exists because a query needs it, since each extra index slows writes
   - 30 minutes for departments
 - **Expected 401 on a first visit.** The silent refresh answers 401 when nobody is signed in on this browser, and Chrome logs every 4xx response in the console. That one request is expected, and the end-to-end checks allow it.
 
+## Frontend Phase 2: Reusable components
+
+- **Native elements first.** `Select`, `RadioGroup`, `Checkbox` and the dialogs are built on `<select>`, radio inputs, checkboxes and `<dialog>`. Keyboard support, screen reader announcements and phone pickers then come from the browser, not from code that could get them wrong. `RadioGroup` takes react-hook-form's `register()` as it is.
+- **Variants are typed maps, and `className` is only for layout.** Without a class-merging library, two Tailwind classes for the same property (`px-3` and `px-1`) are decided by stylesheet order, not by the order they are written. So components don't accept overrides that would compete with their own classes: a `variant` or `size` prop chooses between fixed sets instead.
+- **Invalid state comes from ARIA.** Fields turn red from their own `aria-invalid`, which `FormField` sets along with the error's id. A button can't carry `aria-invalid` in ARIA 1.2, so the date picker's trigger uses `data-invalid` for the border and `aria-describedby` for the message.
+- **DatePicker** follows the WAI-ARIA date picker dialog pattern:
+  - The month is a `role="grid"` table with one tab stop. Arrows move by day and week, Home and End to the ends of the week, Page Up and Page Down by month (by year with Shift), Enter picks a day and Esc closes.
+  - Unavailable days (before `min`, or blocked by `isDateDisabled`, such as a doctor's days off) stay reachable but can't be picked. Their label says why: "Sunday, 25 October 2026, no sessions".
+  - Weeks start on Monday. The popover opens toward the side that has room. Esc inside it is cancelled, so it never closes a surrounding modal at the same time.
+  - The date maths (`calendar.ts`) is pure and unit-tested, and so are the keyboard paths.
+- **Table: one DOM for both screen sizes.**
+  - On phones, CSS turns each row into a card, with the column name before each value (`content: attr(data-label)`). Explicit `table`, `rowgroup`, `row` and `cell` roles keep the table semantics that some browsers drop when a table's display changes. A justified lint exception covers those roles.
+  - Sortable headers are buttons, and their `th` carries `aria-sort`.
+  - The first load shows skeleton rows. A background refresh keeps the rows and dims them.
+- **Memoized table rows.** Rows are wrapped in `React.memo` and keyed by id. TanStack Query's structural sharing keeps unchanged rows as the same objects across refetches, so a refetch or a live update re-renders only the rows that changed. This is measured in Phase 4.
+- **Modal and ConfirmDialog** sit on the native `<dialog>`.
+  - While an action runs, the dialog can't be dismissed: Esc, the backdrop and the close button do nothing.
+  - `ConfirmDialog` names its action ("Cancel appointment"). It has no corner close button, so the safe choice gets the initial focus.
+  - Errors appear inside the dialog: a modal makes the rest of the page inert, including toasts.
+- **Pagination** shows the first page, the last page and the current page's neighbours, with gaps; a gap never hides a single page. On phones only the current page shows between the arrows. `aria-current="page"` marks the current page, and the "Showing 21–40 of 134" summary is a polite live region.
+- **Status always pairs color with text and an icon** (`Badge`), so color is never the only signal.
+- **ErrorMessage** says what failed and gives the request id support can trace, with a "Try again" button.
+- **Tabs** follow the WAI-ARIA pattern: one tab stop, arrows and Home/End move between tabs, and selection follows focus.
+- **Lint.** The strict accessibility preset drops the plugin's allow-list for WAI-ARIA Authoring Practices patterns, such as `<table role="grid">`. The recommended preset's mapping is restored in `eslint.config.ts`.
+- **A file-name trap on Windows.** `pagination.ts` next to `Pagination.tsx` can resolve to the wrong file on a case-insensitive file system, so the helper is named `page-items.ts`.
+
 ## Libraries and why
 
 | Library | Why |

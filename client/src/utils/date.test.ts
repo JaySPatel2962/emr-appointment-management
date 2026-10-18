@@ -9,6 +9,7 @@ import {
   daysInMonth,
   formatDate,
   formatDateLong,
+  formatDateWithWeekday,
   formatTimestamp,
   isValidDate,
 } from '@/utils/date';
@@ -50,6 +51,7 @@ describe('clinic dates', () => {
   it('formats dates the way Indian clinics write them', () => {
     expect(formatDateLong('2026-10-19')).toBe('Monday, 19 October 2026');
     expect(formatDate('2026-10-19')).toBe('19 Oct 2026');
+    expect(formatDateWithWeekday('2026-10-19')).toBe('Mon, 19 Oct 2026');
   });
 
   it("shows API timestamps on the clinic's clock", () => {

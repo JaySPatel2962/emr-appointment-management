@@ -24,3 +24,5 @@ export interface Page<T> {
   items: T[];
   meta: PageMeta;
 }
+
+export type SortOrder = 'asc' | 'desc';
