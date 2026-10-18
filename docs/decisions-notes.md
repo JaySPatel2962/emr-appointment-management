@@ -118,6 +118,10 @@ Every index exists because a query needs it, since each extra index slows writes
   - If a revoked token is presented again, it must have been copied. Every session of that user is revoked and the event is audited as `REFRESH_TOKEN_REUSE`.
   - The old token is claimed with an atomic conditional update, so two simultaneous refreshes with the same token can't both succeed.
 - **A failed refresh clears the cookie.** A refresh token that failed once will never work again, so the browser can drop it.
+- **Only a request that brought the cookie clears it, and other sites can't call the cookie endpoints.** Found in manual QA: a plain HTML form on another site, posted to `/auth/logout`, arrived without the cookie (SameSite), yet the response cleared the cookie and signed the user out.
+  - Logout and a failed refresh now clear the cookie only when the request carried one.
+  - `/auth/refresh` and `/auth/logout` answer 403 to a request whose `Origin` isn't `CLIENT_URL`. That also covers deployments with `REFRESH_COOKIE_SAMESITE=none`, where the browser would send the cookie across sites.
+  - Requests without `Origin` (curl, Postman, another server) pass, because they carry no browser cookie.
 - **A failed login gives nothing away.**
   - An unknown email, a wrong password and a disabled account all get the same 401, "Invalid email or password". The audit log records the real reason.
   - An unknown email still runs a bcrypt comparison against a dummy hash, so response time doesn't reveal which emails exist.

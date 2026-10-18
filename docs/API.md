@@ -402,11 +402,14 @@ Set-Cookie: emr_refresh=<refresh token>; Path=/api/v1/auth; Expires=Sun, 25 Oct 
 
 **Error responses**
 
-Every failure also clears the cookie (`Set-Cookie: emr_refresh=; ... Expires=Thu, 01 Jan 1970 00:00:00 GMT`), because a refresh cookie that failed once never works again.
+Every failure with a cookie also clears it (`Set-Cookie: emr_refresh=; ... Expires=Thu, 01 Jan 1970 00:00:00 GMT`), because a refresh cookie that failed once never works again. A request without the cookie leaves the browser's cookie alone.
+
+A request whose `Origin` header names another site gets `403 Cross-site requests are not allowed`, so no other page can use the cookie. Requests without `Origin` (curl, Postman) are not affected.
 
 | Status | `message` | When |
 | --- | --- | --- |
 | 401 | `Refresh token missing` | No `emr_refresh` cookie |
+| 403 | `Cross-site requests are not allowed` | The `Origin` header is not `CLIENT_URL` |
 | 401 | `Invalid token` | The cookie is not a valid refresh token |
 | 401 | `Token has expired` | The refresh token is older than 7 days |
 | 401 | `Your session has expired, please log in again` | The token is unknown or revoked, or the user is deactivated. A token that was already revoked, by logout or by an earlier refresh, is treated as stolen: every session of that user is revoked. |
@@ -425,11 +428,7 @@ Every failure also clears the cookie (`Set-Cookie: emr_refresh=; ... Expires=Thu
 }
 ```
 
-```http
-Set-Cookie: emr_refresh=; Path=/api/v1/auth; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Strict
-```
-
-`401 Unauthorized`
+`401 Unauthorized`, with a cookie that isn't a valid refresh token. The cookie is cleared:
 
 ```json
 {
@@ -438,6 +437,10 @@ Set-Cookie: emr_refresh=; Path=/api/v1/auth; Expires=Thu, 01 Jan 1970 00:00:00 G
   "data": null,
   "meta": { "requestId": "f2bbbf77-701b-4368-bb1c-7d68038faec3" }
 }
+```
+
+```http
+Set-Cookie: emr_refresh=; Path=/api/v1/auth; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Strict
 ```
 
 A refresh token that was already rotated. After this, even the newest token of the same user is refused:
@@ -457,7 +460,7 @@ A refresh token that was already rotated. After this, even the newest token of t
 
 ### POST /auth/logout
 
-Revokes the refresh token in the cookie and clears the cookie. It always succeeds, even without a cookie. The access token stays valid until it expires, so the client should also drop it.
+Revokes the refresh token in the cookie and clears the cookie. It succeeds even without a cookie, and then sets no cookie. The access token stays valid until it expires, so the client should also drop it.
 
 - **Roles:** public; the `emr_refresh` cookie is optional
 - **Body:** none
@@ -486,7 +489,7 @@ curl -X POST "$BASE_URL/auth/logout" \
 Set-Cookie: emr_refresh=; Path=/api/v1/auth; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Strict
 ```
 
-**Error responses:** none apart from the [rate limit](#rate-limits).
+**Error responses:** `403 Cross-site requests are not allowed` when the `Origin` header names another site, as for [refresh](#post-authrefresh), and the [rate limit](#rate-limits).
 
 ### Users
 
@@ -2824,7 +2827,7 @@ interface ClientToServerEvents {
 | --- | --- | --- |
 | 400 | The request is malformed or breaks a validation rule | `Validation failed` (each problem in `meta.errors`), `Malformed JSON in request body`, `Request body is nested too deeply` (more than 32 levels), `Invalid value for <field>` |
 | 401 | Not authenticated | `Authentication required`, `Invalid token`, `Token has expired`, `Invalid email or password`, `Refresh token missing`, `Your session has expired, please log in again` |
-| 403 | Authenticated, but the role or doctor scope doesn't allow it | `You do not have permission to perform this action`, `Doctors can only update consultation notes`, `Doctors can only view their own slots` |
+| 403 | Authenticated, but the role or doctor scope doesn't allow it; or a cookie endpoint called from another site | `You do not have permission to perform this action`, `Doctors can only update consultation notes`, `Doctors can only view their own slots`, `Cross-site requests are not allowed` |
 | 404 | Not found, or outside a doctor's scope | `Doctor not found`, `Doctor not found in this department`, `Patient not found`, `Appointment not found`, `Route not found: <METHOD> <path>` |
 | 409 | Conflicts with the current state | `Slot already booked`, `This appointment is <status> and cannot be <action>`, `A record with the same email already exists` |
 | 413 | The body is larger than `BODY_LIMIT` (default 100 KB) | `Request body is too large` |

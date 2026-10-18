@@ -15,6 +15,7 @@ import { bodyOf, dataOf, setCookieLine } from '../helpers/http.js';
 const app = createApp();
 const REFRESH_URL = '/api/v1/auth/refresh';
 const LOGOUT_URL = '/api/v1/auth/logout';
+const CLIENT_URL = 'http://localhost:5173';
 
 const sessionSchema = z.object({
   accessToken: z.string().min(1),
@@ -158,4 +159,49 @@ describe('POST /api/v1/auth/logout', () => {
     expect(setCookieLine(res, REFRESH_COOKIE_NAME)).toMatch(/Expires=Thu, 01 Jan 1970/);
     expect(refreshAfterLogout.status).toBe(401);
   });
+
+  it("accepts the app's own origin", async () => {
+    const user = await createUser(ROLES.RECEPTIONIST);
+    const { refreshCookie } = await loginAs(app, user.email);
+
+    const res = await request(app)
+      .post(LOGOUT_URL)
+      .set('Origin', CLIENT_URL)
+      .set('Cookie', refreshCookie);
+
+    expect(res.status).toBe(200);
+    expect(setCookieLine(res, REFRESH_COOKIE_NAME)).toMatch(/Expires=Thu, 01 Jan 1970/);
+  });
+});
+
+// Found in manual QA: a form posted from another site reached /auth/logout without the cookie
+// (SameSite), but the response cleared the cookie anyway and signed the user out.
+describe('cross-site requests to the cookie endpoints', () => {
+  it.each([LOGOUT_URL, REFRESH_URL])(
+    'refuses %s from another origin and leaves the session alone',
+    async (url) => {
+      const user = await createUser(ROLES.RECEPTIONIST);
+      const { refreshCookie } = await loginAs(app, user.email);
+
+      const res = await request(app)
+        .post(url)
+        .set('Origin', 'https://evil.example')
+        .set('Cookie', refreshCookie);
+
+      expect(res.status).toBe(403);
+      expect(bodyOf(res).message).toBe('Cross-site requests are not allowed');
+      expect(setCookieLine(res, REFRESH_COOKIE_NAME)).toBeUndefined();
+      const stillValid = await request(app).post(REFRESH_URL).set('Cookie', refreshCookie);
+      expect(stillValid.status).toBe(200);
+    },
+  );
+
+  it.each([LOGOUT_URL, REFRESH_URL])(
+    'does not clear a cookie that %s was not sent',
+    async (url) => {
+      const res = await request(app).post(url);
+
+      expect(setCookieLine(res, REFRESH_COOKIE_NAME)).toBeUndefined();
+    },
+  );
 });

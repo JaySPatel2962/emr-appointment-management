@@ -28,19 +28,28 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const refresh = asyncHandler(async (req, res) => {
+  const refreshToken = readRefreshCookie(req);
   try {
-    const session = await authService.refresh(readRefreshCookie(req), getClientInfo(req));
+    const session = await authService.refresh(refreshToken, getClientInfo(req));
     setRefreshCookie(res, session.refreshToken, session.refreshTokenExpiresAt);
     sendSuccess(res, { message: 'Session refreshed', data: sessionBody(session) });
   } catch (error) {
-    // A refresh cookie that failed once will never work again, so the browser can drop it.
-    clearRefreshCookie(res);
+    // A refresh cookie that failed once will never work again, so the browser can drop it. A
+    // request that brought no cookie leaves the browser's own cookie alone (see logout).
+    if (refreshToken !== undefined) {
+      clearRefreshCookie(res);
+    }
     throw error;
   }
 });
 
 export const logout = asyncHandler(async (req, res) => {
-  await authService.logout(readRefreshCookie(req), getClientInfo(req));
-  clearRefreshCookie(res);
+  const refreshToken = readRefreshCookie(req);
+  await authService.logout(refreshToken, getClientInfo(req));
+  // Only a request that brought the cookie clears it. A form posted from another site arrives
+  // without it (SameSite), and must not be able to sign the user out by clearing it.
+  if (refreshToken !== undefined) {
+    clearRefreshCookie(res);
+  }
   sendSuccess(res, { message: 'Logged out successfully', data: null });
 });
