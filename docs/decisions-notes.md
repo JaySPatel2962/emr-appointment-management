@@ -220,6 +220,43 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Every commit passes the same gates:** Prettier, `tsc --noEmit`, ESLint `strictTypeChecked`, the whole test suite, and a production build.
 - **What the tests caught:** the `_id` override in `getDoctor` (Phase 4), the index-build race in the test setup (Phase 6), and a test factory that pointed appointments at patients that didn't exist (Phase 8).
 
+## Frontend Phase 0: Tooling
+
+- **A separate `client/` package**, like `server/`, with its own dependencies, scripts and lockfile. Why: the two are deployed and upgraded independently, and no server code can end up in the browser bundle.
+- **Vite 8, React 19 and strict TypeScript 6.** The client uses the server's compiler flags (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`). They live in one `tsconfig.base.json`, which two configs extend: `tsconfig.json` for the app, with DOM types, and `tsconfig.node.json` for the tool configs, with Node types. So browser code can't use a Node global by mistake.
+- **Versions are pinned to what Node 20.19 supports**, as on the server:
+  - React Router 7, because version 8 requires Node 22
+  - Vitest 4.1, jsdom 29 and jest-dom 6.9, because their next versions also require Node 22
+  - TypeScript 6.0, because typescript-eslint doesn't support 7 yet
+- **Tailwind CSS 4 rather than CSS Modules.** Why:
+  - Design tokens (colors, the status palette, type, spacing) are defined once, in CSS `@theme`, and every utility uses them, so spacing and colors stay consistent.
+  - Responsive (`sm:`, `md:`, `lg:`), `focus-visible:` and `motion-reduce:` variants are built in. That makes mobile-first layouts and accessible focus states cheap.
+  - It has no runtime cost, and the build keeps only the classes in use. The placeholder page needs 5 KB of CSS.
+  - Class lists live inside the reusable components, so pages compose components rather than repeat classes.
+  - CSS Modules would need a hand-written media query in every file. And with `noUncheckedIndexedAccess`, every class lookup would be typed `string | undefined`, so a mistyped class name wouldn't be caught.
+- **TanStack Query for server state, React Context for auth only.**
+  - Almost all of this app's state is server data: slots, appointments, doctors.
+  - TanStack Query caches it, merges duplicate requests and refetches stale data. It also gives every screen its loading and error states.
+  - Socket events can update or invalidate the cache directly.
+  - The only state left that the whole app shares is the session, and Context handles it without a store library such as Redux or Zustand.
+- **react-hook-form with zod.** zod is the server's validation library as well, so the client's rules read like the server's, and form types come from `z.infer`. react-hook-form keeps inputs uncontrolled, so typing doesn't re-render the whole form.
+- **axios rather than fetch.** Its interceptors are the natural place to add the bearer token and to refresh it once on a 401, and `withCredentials` sends the refresh cookie. A lint rule forbids importing axios outside `src/services/`, so every request goes through those interceptors.
+- **No browser storage.** ESLint bans `localStorage` and `sessionStorage`, so the access token can't be persisted by accident. It lives in memory, and after a page reload the app gets a new one from the httpOnly refresh cookie.
+- **Lint rules beyond the server's.** These come from plugins:
+  - React Hooks, including the React Compiler checks such as purity and no `setState` inside effects
+  - React Refresh
+  - TanStack Query: complete query keys and a stable client
+  - Accessibility, using the strict preset. The rules come from `eslint-plugin-jsx-a11y-x`, a maintained fork. The original plugin supports ESLint only up to 9, and the repository is on ESLint 10.
+- **The `@/` import alias** (for example `@/services/http`) is resolved by Vite and by TypeScript `paths`. The server uses Node subpath imports (`#app/*`) instead, only because Node runs it without a bundler.
+- **The API's location comes from env vars that are validated at startup.**
+  - `VITE_API_URL` and `VITE_SOCKET_URL` are checked with zod. An invalid value stops the app and names the variable, never its value.
+  - `VITE_SOCKET_URL` defaults to the API's origin.
+  - `VITE_` values are compiled into the public bundle, so nothing secret goes in them.
+- **The browser calls the API directly**, at `http://localhost:5000/api/v1`, and the server's CORS allow-list (`CLIENT_URL`) admits it. There is no dev-server proxy. Why: this is the setup API.md documents, and a production build works the same way.
+  - The refresh cookie still flows. `localhost:5173` and `localhost:5000` are the same site, so the `SameSite=Strict` cookie is sent. Browsers treat `http://localhost` as secure, so the `Secure` cookie is kept.
+  - The cost is a CORS preflight before each request that carries the `Authorization` header. In production, a reverse proxy that serves both under one origin (`VITE_API_URL=/api/v1`) removes it.
+- **`dev` and `preview` both use port 5173**, with `strictPort`, because CORS allows exactly one origin.
+
 ## Libraries and why
 
 | Library | Why |
@@ -240,6 +277,23 @@ Every index exists because a query needs it, since each extra index slows writes
 | ESLint, typescript-eslint, Prettier | Strict type-aware linting and consistent formatting |
 | Vitest, supertest, mongodb-memory-server | Fast tests through the real HTTP API against a real, in-memory MongoDB replica set |
 | socket.io-client | Real socket round trips in the tests |
+
+Client libraries:
+
+| Library | Why |
+| --- | --- |
+| React 19 | The required UI library |
+| Vite 8 | A fast dev server with hot reload, and an optimized production build |
+| React Router 7 | The required router: nested layouts, lazy-loaded routes, and URL query params for list filters |
+| TanStack Query 5 | The server-state cache: merges duplicate requests, tracks staleness, refetches, gives loading and error states, and lets socket events update the cache |
+| axios | Interceptors for the bearer token and the refresh on 401, and `withCredentials` for the refresh cookie |
+| react-hook-form, @hookform/resolvers | Fast, uncontrolled forms validated by zod schemas |
+| zod 4 | The server's validation library, so form rules and types come from the same kind of schema |
+| socket.io-client 4 | Matches the server's Socket.IO, for live scheduler updates |
+| Tailwind CSS 4 | Utility styling on shared design tokens, with no runtime |
+| ESLint plugins: react-hooks, react-refresh, jsx-a11y-x, @tanstack/eslint-plugin-query | Hook rules, hot-reload-safe exports, accessibility and query-key checks |
+| Vitest, jsdom, Testing Library | Unit and component tests that run on the app's own Vite config |
+| Prettier, prettier-plugin-tailwindcss | Consistent formatting and class order |
 
 ## Confirmed product decisions
 
@@ -276,7 +330,7 @@ Made without a specific instruction. Each is a small change if the clinic wants 
 
 ## Workflow
 
-- One phase per commit on `feat/backend`, using conventional commits.
+- One phase per commit on `feat/backend`, using conventional commits. The frontend follows the same rules on `feat/frontend`, which was branched from `feat/backend`.
 - Messages follow the 50/72 format and carry only the author's name, with no AI co-author lines. The git email is set for this repository only.
 - Every commit passes the same gates: Prettier, type-check, lint, the whole test suite and a production build.
 - `.env` is never committed.

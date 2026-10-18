@@ -5,13 +5,18 @@ Enterprise EMR appointment management module (MERN). Code quality and architectu
 
 ## Stack
 - Server: Node (>= 20.19), Express 5, MongoDB, Mongoose, Socket.IO, zod, JWT, bcrypt
-- Client: React (Vite), React Router, axios
+- Client: React 19 (Vite 8), React Router 7, TanStack Query 5, axios, react-hook-form + zod, socket.io-client, Tailwind CSS 4; Vitest + Testing Library
 - TypeScript only, strict mode, no `any`, no `@ts-ignore`
 
 ## Structure
 - `server/src/`: config, constants, controllers, middlewares, models, routes, services, sockets, scripts, types, validators, utils
 - `server/tests/`: `unit/`, `integration/`, `helpers/`
-- `client/src/`: components, pages, routes, services, context, hooks, utils
+- `client/src/`, organized by feature:
+  - `app/`: providers, the router and the layout shell
+  - `components/`: shared UI in `ui/`, plus `layout/` and `feedback/`
+  - `features/<feature>/`: auth, dashboard, scheduler, booking, appointments, admin, plus doctors, departments and patients. Each has `api.ts`, `hooks/`, `components/`, `pages/` and `schemas.ts`.
+  - `services/`: the HTTP client, the socket and the query client
+  - `hooks/`, `utils/`, `types/`, `constants/`, `config/`, `styles/`, `test/`
 
 ## Architecture rules
 - Request flow: routes -> validators -> controllers -> services -> models
@@ -31,6 +36,37 @@ Enterprise EMR appointment management module (MERN). Code quality and architectu
 - Import server modules through the `#app/*` alias (e.g. `#app/config/env.js`), not long relative paths
 - Never log secrets or tokens
 
+## Frontend rules
+- Components:
+  - Functional components only. Type each component's props with an exported `XxxProps` interface, and don't use `React.FC`. The one class is the error boundary, because React requires a class for it.
+  - No business logic in components. They render and wire up events. Data fetching, mutations, derived state and business rules live in hooks and in pure functions in `utils/`.
+  - Build shared UI once in `src/components/ui/` and reuse it. Don't restyle the same element in several places.
+- Folders: organize by feature. Each `src/features/<feature>/` owns its API calls (`api.ts`), hooks, components, pages and zod schemas.
+- State and data:
+  - Server state lives in TanStack Query, with query keys from each feature's key factory.
+  - Context is for auth only. There is no global client-state store.
+  - All HTTP goes through `src/services/http.ts`, which adds the access token and refreshes it; lint forbids importing axios anywhere else. API functions return the typed `data` (and `meta` for pages) from the response envelope.
+- Forms use react-hook-form with zod schemas (`z.infer` types). Server field errors from `meta.errors` are mapped onto the form fields.
+- Auth storage:
+  - Keep the access token in memory only.
+  - Never use `localStorage` or `sessionStorage` (lint-enforced).
+  - The refresh token exists only as the httpOnly cookie.
+- Imports and exports:
+  - Named exports only, except in config files. Lazy-loaded routes import named exports too.
+  - Import client modules through the `@/` alias (e.g. `@/services/http`).
+- Accessibility:
+  - Every control has a label, and semantic HTML comes first.
+  - Focus is visible, and custom widgets work fully from the keyboard.
+  - Async results are announced with `aria-live`.
+  - Color is never the only signal.
+- Styling:
+  - Use Tailwind utilities with the design tokens in `src/styles/index.css` (`@theme`).
+  - Component variants are typed maps, and classes are joined with `cn()`.
+  - No inline styles.
+- Every page has loading, empty and error states, and works at 375px, 768px and 1280px wide.
+- Use `React.memo`, `useCallback` and `useMemo` only where they measurably help, such as slot grid cells and table rows. Record each one in `docs/decisions-notes.md`.
+- Dates and times are the API's clinic-timezone strings (`"YYYY-MM-DD"`, `"HH:mm"`). Never turn them into a `Date` to display them.
+
 ## Domain rules
 - Roles: `SUPER_ADMIN`, `RECEPTIONIST`, `DOCTOR`; doctors see only their own appointments
 - Appointment status flow: `SCHEDULED -> ARRIVED -> COMPLETED`, or `CANCELLED`
@@ -42,7 +78,6 @@ Enterprise EMR appointment management module (MERN). Code quality and architectu
 - Consistent naming, small reusable functions, no duplicated code
 - Never return password hashes or tokens in responses
 - Use `.lean()` for read queries; paginate, filter, and sort on the server
-- Frontend: reusable components, loading and error states, `React.memo`/`useCallback` only where useful
 
 ## Workflow
 - Plan before coding; one feature per commit, using conventional commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`)
@@ -63,12 +98,19 @@ Server (run in `server/`):
 - `npm run secrets`: generate missing JWT secrets in `.env` (never printed)
 - `npm run seed`: create the first Super Admin and the departments from env vars
 
-Client (run in `client/`): `npm run dev`
+Client (run in `client/`):
+- Setup: `npm install`. The defaults point at the local API. To change them, copy `.env.example` to `.env.local`.
+- `npm run dev`: start the app on http://localhost:5173, the API's default `CLIENT_URL`
+- `npm run build`, then `npm run preview`: type-check and build to `dist/`, then serve the build on the same port
+- `npm run lint` / `npm run format`: ESLint / Prettier
+- `npm run typecheck`: `tsc --noEmit` for the app (`tsconfig.json`) and the tool configs (`tsconfig.node.json`)
+- `npm test`: Vitest unit and component tests (jsdom)
+- `npm run test:coverage`: the tests plus a coverage report
 
 ## Backend status
 All backend phases are done and committed on `feat/backend`: 174 tests pass, about 92% line coverage.
 - Done: 0 tooling, 1 foundation (env, errors, security, health), 2 models and indexes, 3 auth, 4 doctors, receptionists and departments, 5 slot generation, 6 appointments and patients, 7 Socket.IO, 8 concurrency, RBAC and end-to-end tests
-- Not done yet: the frontend, `ENGINEERING_DECISIONS.md`, the README's assumptions, limitations and future sections, a git remote
+- Not done yet: `ENGINEERING_DECISIONS.md`, the README's assumptions, limitations and future sections, a git remote. The frontend's progress is under Frontend status below.
 - Design decisions: `docs/decisions-notes.md`
 
 ### Response shapes
@@ -141,6 +183,22 @@ Status codes:
   - Auth: `JWT_ACCESS_TTL_SECONDS` (900), `REFRESH_TOKEN_TTL_DAYS` (7), `REFRESH_COOKIE_SAMESITE` (strict), `BCRYPT_ROUNDS` (12)
   - Limits: `TRUST_PROXY_HOPS` (0), `BODY_LIMIT` (100kb), `RATE_LIMIT_WINDOW_MS` (900000), `RATE_LIMIT_MAX` (300), `LOGIN_RATE_LIMIT_MAX` (10)
 - Seed script only: `SEED_ADMIN_NAME`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_DEPARTMENTS`
+
+## Frontend status
+The frontend is built on `feat/frontend` (branched from `feat/backend`), one phase per commit.
+- Done: 0 tooling (Vite, React, strict TypeScript, Tailwind, ESLint, Prettier, Vitest, env validated at startup)
+- Next:
+  - 1 foundation: typed API layer, axios refresh queue, auth, routing, layout, error handling
+  - 2 reusable components
+  - 3 pages
+  - 4 performance and quality
+  - 5 Playwright end-to-end tests against the real API
+- Design decisions: the Frontend sections of `docs/decisions-notes.md`
+
+### Client env vars (`client/.env.local`; see `client/.env.example`)
+- `VITE_API_URL` (http://localhost:5000/api/v1): the REST API, including `/api/v1`. A path such as `/api/v1` also works behind a same-origin reverse proxy.
+- `VITE_SOCKET_URL` (the origin of `VITE_API_URL`): the Socket.IO server
+- Both are validated at startup, and both are public, because they're compiled into the bundle
 
 ## NOTE
 - Never use niro for anything

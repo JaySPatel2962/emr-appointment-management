@@ -8,6 +8,14 @@ coverage/
 .env.*
 !.env.example
 
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Playwright reports and test artifacts
+playwright-report/
+test-results/
+blob-report/
+
 # Logs
 *.log
 npm-debug.log*

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"],
+    // Vite's native config loader needs real file extensions (vitest.config.ts imports vite.config.ts).
+    "allowImportingTsExtensions": true
+  },
+  "include": ["*.config.ts"]
+}

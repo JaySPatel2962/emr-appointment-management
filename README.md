@@ -2,12 +2,19 @@
 
 Appointment management module for an enterprise EMR system. It covers role-based access (Super Admin, Receptionist, Doctor), doctor schedules, dynamically generated slots, booking that is safe against double booking, and real-time scheduler updates.
 
-> **Status:** the backend (`server/`) is complete and tested (174 tests, about 92% line coverage). Design decisions are recorded in [`docs/decisions-notes.md`](docs/decisions-notes.md). The frontend hasn't been started.
+> **Status:**
+> - The backend (`server/`) is complete and tested: 174 tests, about 92% line coverage.
+> - The frontend (`client/`) is in progress. Its tooling is set up, and the screens are being built in phases.
+> - Design decisions are recorded in [`docs/decisions-notes.md`](docs/decisions-notes.md).
 
 ## Tech stack
 
 - **Server:** Node.js (>= 20.19), Express 5, MongoDB with Mongoose, zod, JWT, bcrypt, Socket.IO, TypeScript (strict)
-- **Tooling:** tsx (development), tsc (build), ESLint and Prettier, Vitest with supertest and mongodb-memory-server
+- **Client:** React 19 (Vite 8), React Router 7, TanStack Query 5, axios, react-hook-form with zod, socket.io-client, Tailwind CSS 4, TypeScript (strict)
+- **Tooling:**
+  - Server: tsx (development) and tsc (build); Vitest with supertest and mongodb-memory-server
+  - Client: Vite; Vitest with jsdom and Testing Library
+  - Both: ESLint and Prettier
 
 ## Getting started (server)
 
@@ -61,6 +68,40 @@ The server validates these at startup and refuses to start if any are invalid, n
 | `RATE_LIMIT_WINDOW_MS` | Rate limit window | `900000` (15 minutes) |
 | `RATE_LIMIT_MAX` | Requests per client IP per window, across the API | `300` |
 | `LOGIN_RATE_LIMIT_MAX` | Failed logins per client IP per window | `10` |
+
+## Getting started (client)
+
+Start the API first (see above), then:
+
+```bash
+cd client
+npm install
+npm run dev            # http://localhost:5173, the origin the API allows by default (CLIENT_URL)
+```
+
+The defaults expect the API at `http://localhost:5000`. To point the app somewhere else, copy `client/.env.example` to `client/.env.local` and edit it.
+
+## Scripts (client)
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Starts the app with hot reload on port 5173 |
+| `npm run build` | Type-checks, then builds for production into `dist/` |
+| `npm run preview` | Serves the production build on port 5173 |
+| `npm run lint` | ESLint: type-aware, plus React Hooks, accessibility and TanStack Query rules |
+| `npm run format` | Prettier, which also sorts Tailwind classes |
+| `npm run typecheck` | `tsc --noEmit` for the app and the tool configs |
+| `npm test` | Vitest unit and component tests (jsdom) |
+| `npm run test:coverage` | The tests, plus a coverage report in `coverage/index.html` |
+
+## Environment variables (client)
+
+Both are optional. They are checked when the app starts, and an invalid one stops it with the variable's name. They're compiled into the JavaScript bundle, so they're public: never put a secret in them.
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `VITE_API_URL` | Base URL of the REST API, including `/api/v1`. A path such as `/api/v1` also works when a reverse proxy serves the API from the app's origin. | `http://localhost:5000/api/v1` |
+| `VITE_SOCKET_URL` | Origin of the Socket.IO server | The origin of `VITE_API_URL` |
 
 ## API Documentation
 
@@ -281,7 +322,12 @@ server/
   src/      application code: config, constants, controllers, middlewares, models,
             routes, services, sockets, scripts, types, validators, utils
   tests/    unit/, integration/, helpers/
+client/
+  src/      app/ (providers, router, layout), components/ (shared UI),
+            features/ (auth, dashboard, scheduler, booking, appointments, admin),
+            services/ (HTTP, socket, query client), hooks/, utils/, types/,
+            constants/, config/, styles/, test/
 docs/       assessment brief and design decision notes
 ```
 
-Server modules import each other through the `#app/*` alias (for example `#app/config/env.js`), which Node resolves natively through `package.json` `imports`.
+Server modules import each other through the `#app/*` alias (for example `#app/config/env.js`), which Node resolves natively through `package.json` `imports`. Client modules use the `@/` alias (for example `@/config/env`), which Vite and TypeScript resolve.
