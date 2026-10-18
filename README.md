@@ -62,6 +62,21 @@ The server validates these at startup and refuses to start if any are invalid, n
 | `RATE_LIMIT_MAX` | Requests per client IP per window, across the API | `300` |
 | `LOGIN_RATE_LIMIT_MAX` | Failed logins per client IP per window | `10` |
 
+## API Documentation
+
+The full API reference is in [`docs/API.md`](docs/API.md). It covers:
+- every endpoint: roles, parameters, validation rules, a curl example, and real success and error responses
+- the roles and permissions matrix, including how doctors are limited to their own records
+- the appointment status workflow, the slot rules and concurrency
+- pagination, sorting and filtering
+- the Socket.IO events and their payloads
+- every error code, and the rate limits
+
+A Postman collection (v2.1) with every endpoint is in [`docs/postman_collection.json`](docs/postman_collection.json). To use it:
+1. Import it, and set `adminEmail` and `adminPassword` to the Super Admin from `npm run seed`. `baseUrl` defaults to `http://localhost:5000/api/v1`.
+2. Run **Auth > Log in** first. It stores the access token in `accessToken`, which every other request sends.
+3. The folders run top to bottom: each request stores the ids it creates for the ones that follow.
+
 ## API conventions
 
 Base path: `/api/v1`. Every response, success or error, uses the same envelope:
@@ -77,7 +92,7 @@ Base path: `/api/v1`. Every response, success or error, uses the same envelope:
 
 Lists are paginated with `page` (default 1) and `limit` (default 20, at most 100), and their `meta` is `{ "page", "limit", "total", "totalPages" }`.
 
-Errors have `success: false` and `data: null`. `meta.requestId` matches the `X-Request-Id` response header, and validation errors list each problem in `meta.errors` as `{ "field": "body.email", "message": "Invalid email address" }`.
+Errors have `success: false` and `data: null`. `meta.requestId` matches the `X-Request-Id` response header, and validation errors list each problem in `meta.errors` as `{ "field": "body.email", "message": "Must be a valid email address" }`.
 
 | Status | When |
 | --- | --- |
