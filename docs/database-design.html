@@ -1,0 +1,2528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EMR Database Design</title>
+<meta name="description" content="How the EMR appointment module stores its data in MongoDB: collections, relationships, indexes, booking and auth flows, measured query plans and scaling.">
+<script>
+  // Apply a saved light or dark choice before the first paint.
+  try {
+    var savedTheme = localStorage.getItem('emr-db-design-theme');
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+  } catch (error) {
+    // Storage can be unavailable (private window, blocked site data); the system theme applies.
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;600&family=Atkinson+Hyperlegible+Next:ital,wght@0,400;0,600;0,700;1,400&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+  :root {
+    --bg: #f3f5f1;
+    --surface: #ffffff;
+    --surface-2: #edf1ec;
+    --surface-3: #dfe6e0;
+    --fg: #15201b;
+    --muted: #4f5e57;
+    --faint: #66756e;
+    --border: #d5ddd7;
+    --border-strong: #b5c2ba;
+    --accent: #0b6b60;
+    --accent-strong: #08514a;
+    --accent-soft: #dceee8;
+    --on-accent: #ffffff;
+    --ok: #1f6f45;
+    --ok-soft: #dff0e5;
+    --warn: #ad3a12;
+    --warn-soft: #fbe6dc;
+    --info: #2a58a6;
+    --info-soft: #e3ebf8;
+    --amber: #8f5300;
+    --amber-soft: #f9edd5;
+    --grey: #5d6870;
+    --grey-soft: #e7ebee;
+    --grid: rgba(11, 107, 96, 0.07);
+    --code-bg: #f4f7f4;
+    --code-key: #0b6b60;
+    --code-str: #8a4708;
+    --code-num: #2a58a6;
+    --code-fn: #6b5a2e;
+    --shadow: 0 1px 2px rgba(21, 32, 27, 0.05), 0 8px 24px rgba(21, 32, 27, 0.06);
+    /* Diagram colours: hex only, because Mermaid derives shades from them. */
+    --m-node: #e3f1ec;
+    --m-node-border: #0b6b60;
+    --m-alt: #f3f6f3;
+    --m-line: #4d5c55;
+    --m-note: #fbf1d9;
+    --m-note-border: #c8962e;
+    --m-text: #15201b;
+    --m-surface: #ffffff;
+    --m-surface-2: #edf1ec;
+    --font-text: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    --font-head: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --font-mono: "Atkinson Hyperlegible Mono", "Cascadia Mono", Consolas, "SFMono-Regular", ui-monospace, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1311;
+      --surface: #131b18;
+      --surface-2: #19231f;
+      --surface-3: #23302b;
+      --fg: #e2eae5;
+      --muted: #a3b1aa;
+      --faint: #84928b;
+      --border: #25322d;
+      --border-strong: #36463f;
+      --accent: #4fc4b2;
+      --accent-strong: #8fe0d3;
+      --accent-soft: #12352f;
+      --on-accent: #06201c;
+      --ok: #6fd09a;
+      --ok-soft: #133022;
+      --warn: #f2895c;
+      --warn-soft: #3b1e13;
+      --info: #86aef2;
+      --info-soft: #172743;
+      --amber: #f0b45a;
+      --amber-soft: #382912;
+      --grey: #a0aab2;
+      --grey-soft: #232a2f;
+      --grid: rgba(79, 196, 178, 0.06);
+      --code-bg: #111916;
+      --code-key: #6fd3c3;
+      --code-str: #e9b27a;
+      --code-num: #93b6f5;
+      --code-fn: #c9b98a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+      --m-node: #12352f;
+      --m-node-border: #4fc4b2;
+      --m-alt: #18221e;
+      --m-line: #a3b2ab;
+      --m-note: #3a2f17;
+      --m-note-border: #c8962e;
+      --m-text: #e2eae5;
+      --m-surface: #131b18;
+      --m-surface-2: #19231f;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0d1311;
+    --surface: #131b18;
+    --surface-2: #19231f;
+    --surface-3: #23302b;
+    --fg: #e2eae5;
+    --muted: #a3b1aa;
+    --faint: #84928b;
+    --border: #25322d;
+    --border-strong: #36463f;
+    --accent: #4fc4b2;
+    --accent-strong: #8fe0d3;
+    --accent-soft: #12352f;
+    --on-accent: #06201c;
+    --ok: #6fd09a;
+    --ok-soft: #133022;
+    --warn: #f2895c;
+    --warn-soft: #3b1e13;
+    --info: #86aef2;
+    --info-soft: #172743;
+    --amber: #f0b45a;
+    --amber-soft: #382912;
+    --grey: #a0aab2;
+    --grey-soft: #232a2f;
+    --grid: rgba(79, 196, 178, 0.06);
+    --code-bg: #111916;
+    --code-key: #6fd3c3;
+    --code-str: #e9b27a;
+    --code-num: #93b6f5;
+    --code-fn: #c9b98a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --m-node: #12352f;
+    --m-node-border: #4fc4b2;
+    --m-alt: #18221e;
+    --m-line: #a3b2ab;
+    --m-note: #3a2f17;
+    --m-note-border: #c8962e;
+    --m-text: #e2eae5;
+    --m-surface: #131b18;
+    --m-surface-2: #19231f;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scroll-padding-top: 20px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-text);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
+  a:hover { color: var(--accent-strong); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.05em 0.35em;
+    overflow-wrap: break-word;
+  }
+
+  h1, h2, h3 { font-family: var(--font-head); color: var(--fg); text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(2.2rem, 5vw, 3.25rem); line-height: 1.06; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: clamp(1.6rem, 3.2vw, 2.1rem); line-height: 1.15; font-weight: 700; }
+  h3 { font-size: 1.3rem; line-height: 1.3; font-weight: 600; padding-top: 18px; }
+  h4 { font-size: 1rem; line-height: 1.35; margin: 0; }
+  p { margin: 0; }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  .skip-link {
+    position: absolute; left: 12px; top: -60px; z-index: 50;
+    background: var(--accent); color: var(--on-accent); padding: 8px 14px; border-radius: 8px;
+  }
+  .skip-link:focus { top: 12px; color: var(--on-accent); }
+
+  /* Layout: a sticky rail of sections beside the page. */
+  .shell { display: grid; grid-template-columns: 270px minmax(0, 1fr); }
+
+  .rail {
+    position: sticky; top: 0; align-self: start;
+    height: 100vh; height: 100dvh; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 28px;
+    padding: 28px 18px 24px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+  }
+  .rail-head { display: flex; flex-direction: column; gap: 4px; padding-inline: 10px; }
+  .rail-kicker {
+    font-size: 11.5px; line-height: 1.3; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .rail-title { font: 700 22px/1.2 var(--font-head); color: var(--fg); }
+
+  .toc { position: relative; display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 7px 10px; border-radius: 8px;
+    color: var(--muted); text-decoration: none; font-size: 15px; line-height: 1.35;
+  }
+  .toc .n { font: 600 11.5px/1 var(--font-mono); color: var(--faint); min-width: 1.7em; }
+  .toc a:hover { background: var(--surface-2); color: var(--fg); }
+  .toc a[aria-current="true"] { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+  .toc a[aria-current="true"] .n { color: var(--accent); }
+
+  .rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 14px; padding-inline: 10px; }
+  .rail-note { font-size: 12.5px; line-height: 1.5; color: var(--faint); }
+
+  .theme-switch {
+    display: inline-flex; gap: 2px; align-self: flex-start;
+    padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2);
+  }
+  .theme-switch button {
+    font: 500 13px/1 var(--font-text); color: var(--muted);
+    background: transparent; border: 0; border-radius: 7px; padding: 7px 11px; cursor: pointer;
+  }
+  .theme-switch button[aria-pressed="true"] {
+    background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  }
+  .mobile-only { display: none; }
+
+  main {
+    min-width: 0;
+    padding-block: 40px 96px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .page { max-width: 1180px; margin-inline: auto; padding-inline: clamp(0px, 1.5vw, 24px); }
+
+  /* Masthead, on chart-paper ruling. */
+  .masthead {
+    display: flex; flex-direction: column; gap: 20px;
+    padding: clamp(22px, 4vw, 40px);
+    border: 1px solid var(--border); border-radius: 18px;
+    background-color: var(--surface);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 18px 18px;
+    background-position: -1px -1px;
+  }
+  .masthead-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+  .eyebrow {
+    font-size: 12px; line-height: 1.3; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent);
+  }
+  .lede { font-size: 1.125rem; line-height: 1.6; color: var(--muted); max-width: 64ch; }
+  .vitals {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+    gap: 1px; margin: 0;
+    background: var(--border); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+  }
+  .vitals > div {
+    display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 6px;
+    padding: 14px 16px; background: var(--surface);
+  }
+  .vitals dt { font-size: 13px; line-height: 1.35; color: var(--muted); }
+  .vitals dd { margin: 0; font: 700 30px/1 var(--font-head); font-variant-numeric: lining-nums tabular-nums; }
+  .source-note { font-size: 13.5px; color: var(--faint); }
+
+  /* Sections */
+  .section { display: flex; flex-direction: column; gap: 20px; padding-top: 76px; }
+  .section-head {
+    display: flex; align-items: baseline; gap: 14px;
+    padding-bottom: 12px; border-bottom: 1px solid var(--border);
+  }
+  .section-num { font: 600 13px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--accent); }
+  .prose { max-width: 72ch; display: flex; flex-direction: column; gap: 12px; }
+  .measure { max-width: 72ch; }
+  h3 code { font-size: 0.8em; }
+  .muted { color: var(--muted); }
+
+  .list { margin: 0; padding-left: 1.25em; display: flex; flex-direction: column; gap: 8px; max-width: 74ch; }
+  .list li::marker { color: var(--accent); }
+  ol.list li::marker { font-weight: 700; }
+  .list ul { margin: 6px 0 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; margin: 0; }
+  .facts > div {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  }
+  /* "kicker", not "label": Mermaid uses .label inside its SVGs. */
+  .facts dt, .kicker {
+    font-size: 12px; line-height: 1.3; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  }
+  .facts dd { margin: 0; font-size: 15px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 12px; }
+  .tile {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 14px 16px 16px; border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); color: inherit; text-decoration: none;
+    transition: border-color 0.15s ease;
+  }
+  .tile:hover { border-color: var(--accent); color: inherit; }
+  .tile-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .tile-name { font: 600 15px/1.3 var(--font-mono); color: var(--accent-strong); }
+  .tile-model { font-size: 12.5px; color: var(--faint); }
+  .tile-purpose { font-size: 14.5px; line-height: 1.5; color: var(--muted); }
+
+  .callout {
+    padding: 14px 16px; border-radius: 12px;
+    background: var(--accent-soft); border: 1px solid var(--border);
+    max-width: 80ch;
+  }
+  .callout.warn { background: var(--warn-soft); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; list-style: none; font-size: 14.5px; }
+  .legend li { display: flex; align-items: center; gap: 8px; }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; line-height: 1.5; }
+  .table-wrap.wide table { min-width: 860px; }
+  .table-wrap.mid table { min-width: 640px; }
+  /* Rules sit above each row, so filtering rows never leaves a doubled line at the bottom. */
+  th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-top: 1px solid var(--border); }
+  thead th {
+    border-top: 0;
+    font-size: 11.5px; line-height: 1.3; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+    background: var(--surface-2); white-space: nowrap;
+  }
+  td code, th code { font-size: 0.86em; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .nowrap { white-space: nowrap; }
+  .req { font: 600 12px/1.6 var(--font-mono); color: var(--fg); }
+  .req.soft { color: var(--faint); }
+  tr.group > th {
+    background: var(--surface-2); color: var(--fg);
+    font-size: 13px; letter-spacing: 0.02em; text-transform: none; font-weight: 700;
+  }
+  .index-name { display: block; margin-top: 4px; font: 500 12px/1.4 var(--font-mono); color: var(--faint); }
+
+  /* Badges and status chips */
+  .badge {
+    display: inline-flex; align-items: center;
+    font: 600 11.5px/1 var(--font-mono); letter-spacing: 0.03em;
+    padding: 4px 7px; border-radius: 6px; white-space: nowrap;
+    color: var(--muted); background: var(--surface-2);
+  }
+  .badge.ok { color: var(--ok); background: var(--ok-soft); }
+  .badge.accent { color: var(--accent-strong); background: var(--accent-soft); }
+  .badge.key { color: var(--on-accent); background: var(--accent); }
+  .badges { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+
+  .status { display: inline-block; font: 600 11.5px/1 var(--font-mono); letter-spacing: 0.04em; padding: 5px 8px; border-radius: 6px; }
+  .status.scheduled { color: var(--info); background: var(--info-soft); }
+  .status.arrived { color: var(--amber); background: var(--amber-soft); }
+  .status.completed { color: var(--ok); background: var(--ok-soft); }
+  .status.cancelled { color: var(--grey); background: var(--grey-soft); }
+  .status-line { font-size: 15px; line-height: 2; max-width: 80ch; }
+
+  /* Diagrams */
+  .figure { margin: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: hidden; }
+  .figure-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 9px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border);
+  }
+  .figure-bar figcaption { font-size: 13px; line-height: 1.35; font-weight: 600; color: var(--muted); }
+  .btn {
+    font: 500 13px/1 var(--font-text); color: var(--accent-strong);
+    background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
+    padding: 7px 11px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .figure-canvas { overflow: auto; padding: 24px 20px; }
+  .figure-canvas > svg { display: block; margin-inline: auto; height: auto; }
+  .figure[data-zoom="fit"] .figure-canvas > svg { max-width: 100%; }
+  .figure[data-zoom="actual"] .figure-canvas > svg { max-width: none; }
+  /* Mermaid paints the ER "zero" circles white; match them to the surface in both themes. */
+  figure[data-diagram="er"] .figure-canvas marker circle { fill: var(--surface); }
+  .figure-status { color: var(--faint); font-size: 14px; text-align: center; padding: 28px 0; }
+  .figure[data-state="error"] .figure-status { color: var(--warn); text-align: left; padding: 0 0 12px; }
+
+  pre {
+    margin: 0; padding: 14px 16px; overflow-x: auto;
+    font: 13.5px/1.6 var(--font-mono); tab-size: 2;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: inherit; overflow-wrap: normal; }
+  .tok-key { color: var(--code-key); }
+  .tok-str { color: var(--code-str); }
+  .tok-num, .tok-lit { color: var(--code-num); }
+  .tok-fn { color: var(--code-fn); font-style: italic; }
+
+  /* Collection cards */
+  .toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 20px; }
+  .toolbar p { max-width: 72ch; }
+  .cards { display: flex; flex-direction: column; gap: 10px; }
+  details.card { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+  details.card[open] { box-shadow: var(--shadow); }
+  details.card > summary {
+    list-style: none; cursor: pointer;
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "chev title meta" ". purpose purpose";
+    gap: 4px 14px; align-items: center;
+    padding: 16px 18px;
+  }
+  details.card > summary::-webkit-details-marker { display: none; }
+  .chev {
+    grid-area: chev; width: 24px; height: 24px; display: grid; place-items: center;
+    border: 1px solid var(--border-strong); border-radius: 7px; color: var(--accent);
+    transition: transform 0.15s ease;
+  }
+  .chev svg { width: 12px; height: 12px; }
+  details.card[open] .chev { transform: rotate(90deg); }
+  .card-title { grid-area: title; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .card-name { font: 600 17px/1.3 var(--font-mono); color: var(--fg); }
+  .card-model { font-size: 13px; color: var(--faint); }
+  .card-meta { grid-area: meta; font: 500 12px/1.3 var(--font-mono); color: var(--faint); white-space: nowrap; }
+  .card-purpose { grid-area: purpose; font-size: 14.5px; color: var(--muted); }
+  .card-body { display: flex; flex-direction: column; gap: 14px; padding: 2px 18px 20px; }
+  .card-body .kicker { margin-top: 4px; }
+
+  /* Index filter */
+  .filters { display: flex; flex-direction: column; gap: 12px; }
+  .search {
+    display: flex; align-items: center; gap: 10px; max-width: 520px;
+    padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface);
+  }
+  .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .search svg { width: 16px; height: 16px; flex: none; color: var(--faint); }
+  .search input {
+    flex: 1; min-width: 0; padding: 10px 0;
+    border: 0; outline: 0; background: transparent; color: var(--fg); font: inherit; font-size: 15px;
+  }
+  .chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .chip-row .kicker { margin-right: 6px; }
+  .chip {
+    font: 500 13px/1 var(--font-text); color: var(--muted);
+    padding: 7px 11px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border-strong); background: var(--surface);
+  }
+  .chip.mono { font-family: var(--font-mono); font-size: 12.5px; }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .filter-count { font: 500 13px/1.3 var(--font-mono); color: var(--faint); }
+
+  /* Query plans */
+  .plan { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 4px; white-space: nowrap; }
+  .stage {
+    font: 600 11.5px/1 var(--font-mono); padding: 4px 6px; border-radius: 5px;
+    color: var(--muted); background: var(--surface-2);
+  }
+  .stage.ix { color: var(--ok); background: var(--ok-soft); }
+  .stage.coll { color: var(--surface); background: var(--warn); }
+  .arrow { color: var(--faint); font-size: 12px; }
+  tr.flag > td { background: var(--warn-soft); }
+  tr.flag > td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+  .examined { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .meter { width: 92px; height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+  .meter > span { display: block; height: 100%; border-radius: inherit; background: var(--ok); }
+  tr.flag .meter > span { background: var(--warn); }
+  .query-name { font-weight: 700; }
+  .flags { counter-reset: flag; }
+
+  .why-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+  .why {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+  }
+  .why .list { gap: 6px; font-size: 15px; }
+
+  tr.recommended > td { background: var(--accent-soft); }
+
+  /* Slot grid example */
+  .slot-demo {
+    display: flex; flex-direction: column; gap: 14px;
+    padding: 16px 18px 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+  }
+  .slot-demo-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 16px; }
+  .slot-demo-head p { font-size: 14.5px; }
+  .seg {
+    display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px;
+    padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2);
+  }
+  .seg-label { font-size: 12.5px; color: var(--muted); padding: 0 8px 0 6px; }
+  .seg button {
+    font: 600 12.5px/1 var(--font-mono); color: var(--muted);
+    background: transparent; border: 0; border-radius: 7px; padding: 7px 9px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+  .timeline { position: relative; padding-bottom: 24px; }
+  .track { position: relative; height: 42px; border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+  .slot { position: absolute; top: 0; bottom: 0; background: var(--accent); border-right: 2px solid var(--surface); }
+  .slot.alt { opacity: 0.8; }
+  .brk {
+    position: absolute; top: 0; bottom: 0; display: grid; place-items: center;
+    font: 600 11px/1 var(--font-text); color: var(--amber);
+    background: repeating-linear-gradient(135deg, var(--amber-soft) 0 6px, transparent 6px 12px);
+  }
+  .rem { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, var(--warn-soft) 0 4px, var(--warn) 4px 5px, var(--warn-soft) 5px 9px); }
+  .ticks { position: absolute; left: 0; right: 0; bottom: 0; height: 16px; }
+  .ticks .tick { position: absolute; transform: translateX(-50%); font: 500 11px/1 var(--font-mono); color: var(--faint); }
+  .ticks .tick:first-child { transform: none; }
+  .ticks .tick:last-child { transform: translateX(-100%); }
+  .slot-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+  .slot-key li { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+  .swatch.slot-swatch { background: var(--accent); }
+  .swatch.break-swatch { background: repeating-linear-gradient(135deg, var(--amber-soft) 0 3px, var(--amber) 3px 4px); }
+  .swatch.rem-swatch { background: repeating-linear-gradient(135deg, var(--warn-soft) 0 3px, var(--warn) 3px 4px); }
+  .slot-summary { font-size: 14.5px; color: var(--muted); }
+
+  .glossary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; margin: 0; }
+  .glossary > div {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  }
+  .glossary dt { font-weight: 700; font-size: 15.5px; line-height: 1.3; }
+  .glossary dd { margin: 0; font-size: 14.5px; color: var(--muted); }
+
+  .foot { margin-top: 80px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 13.5px; color: var(--faint); max-width: 80ch; }
+
+  /* Narrow screens: the rail becomes a sticky tab strip. */
+  @media (max-width: 1020px) {
+    html { scroll-padding-top: 72px; }
+    .shell { display: block; }
+    .rail {
+      position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+      height: auto; overflow: visible; padding: 0; gap: 0;
+      border-right: 0; border-bottom: 1px solid var(--border);
+    }
+    body::before {
+      content: ""; position: fixed; inset: 0 0 auto; z-index: 30;
+      height: env(safe-area-inset-top, 0px); background: var(--surface);
+    }
+    .rail-head, .rail-foot { display: none; }
+    .toc {
+      flex-direction: row; gap: 4px; overflow-x: auto; scrollbar-width: none;
+      padding: 8px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px));
+    }
+    .toc::-webkit-scrollbar { display: none; }
+    .toc a { white-space: nowrap; padding: 7px 12px; font-size: 14px; }
+    .toc .n { display: none; }
+    .theme-switch.mobile-only { display: inline-flex; }
+    main { padding-block: 22px 72px; }
+    .page { padding-inline: 0; }
+    .section { padding-top: 60px; }
+  }
+
+  /* Phones: the field, index and query-plan tables show one block per row instead of scrolling. */
+  @media (max-width: 640px) {
+    .card-body table, #index-table, #plan-table { min-width: 0 !important; }
+    .card-body thead, #index-table thead, #plan-table thead {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
+    .card-body tbody tr, #index-table tbody tr, #plan-table tbody tr {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px;
+      padding: 12px 14px; border-top: 1px solid var(--border);
+    }
+    .card-body tbody tr:first-child, #index-table tbody tr:first-child { border-top: 0; }
+    .card-body tbody td, #index-table tbody td, #plan-table tbody td, #plan-table tbody th {
+      display: block; padding: 0; border: 0; background: none;
+    }
+
+    .card-body tbody td:nth-child(1) { grid-column: 1; }
+    .card-body tbody td:nth-child(3) { grid-column: 2; grid-row: 1; }
+    .card-body tbody td:nth-child(2) { grid-column: 1 / -1; font-size: 13.5px; color: var(--muted); }
+    .card-body tbody td:nth-child(4) { grid-column: 1 / -1; }
+    .card-body tbody td:empty { display: none; }
+    .card-body tbody td:nth-child(3) .req::before { content: "required: "; font-weight: 400; color: var(--faint); }
+
+    #index-table tbody tr { grid-template-columns: auto minmax(0, 1fr); }
+    #index-table tbody td:nth-child(1) { grid-column: 1; }
+    #index-table tbody td:nth-child(3) { grid-column: 2; grid-row: 1; justify-self: end; }
+    #index-table tbody td:nth-child(3) .badges { justify-content: flex-end; }
+    #index-table tbody td:nth-child(2),
+    #index-table tbody td:nth-child(4),
+    #index-table tbody td:nth-child(5),
+    #index-empty td { grid-column: 1 / -1; }
+    #index-table tbody td:nth-child(4)::before { content: "Query: "; font-weight: 700; }
+    #index-table tbody td:nth-child(5)::before { content: "Why: "; font-weight: 700; }
+
+    #plan-table tbody tr.group { display: block; padding: 10px 14px; background: var(--surface-2); }
+    #plan-table tbody tr[data-examined] td:nth-child(1),
+    #plan-table tbody tr[data-examined] td:nth-child(2),
+    #plan-table tbody tr[data-examined] td:nth-child(3) { grid-column: 1 / -1; }
+    #plan-table tbody tr[data-examined] td:nth-child(2)::before { content: "Index: "; font-weight: 700; color: var(--fg); }
+    #plan-table tbody tr[data-examined] td:nth-child(4) { grid-column: 1; text-align: left; }
+    #plan-table tbody tr[data-examined] td:nth-child(5) { grid-column: 2; }
+    #plan-table tbody tr[data-examined] td:nth-child(4)::before,
+    #plan-table tbody tr[data-examined] td:nth-child(5)::before { color: var(--muted); font-size: 13px; }
+    #plan-table tbody tr[data-examined] td:nth-child(4)::before { content: "Examined "; }
+    #plan-table tbody tr[data-examined] td:nth-child(5)::before { content: "Returned "; }
+    #plan-table .examined { align-items: flex-start; vertical-align: top; }
+    #plan-table tr.flag { background: var(--warn-soft); box-shadow: inset 3px 0 0 var(--warn); }
+    #plan-table tr.flag > td:first-child { box-shadow: none; }
+  }
+
+  @media (max-width: 560px) {
+    details.card > summary {
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-areas: "chev title" ". purpose" ". meta";
+    }
+    .figure-canvas { padding: 18px 12px; }
+    .card-body { padding-inline: 14px; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="rail-head">
+      <span class="rail-kicker">EMR appointments</span>
+      <span class="rail-title">Database design</span>
+    </div>
+    <nav class="toc" aria-label="Sections">
+      <a href="#overview"><span class="n">01</span>Overview</a>
+      <a href="#er-diagram"><span class="n">02</span>ER Diagram</a>
+      <a href="#collections"><span class="n">03</span>Collections</a>
+      <a href="#indexes"><span class="n">04</span>Indexes</a>
+      <a href="#booking-flow"><span class="n">05</span>Booking Flow</a>
+      <a href="#status-workflow"><span class="n">06</span>Status Workflow</a>
+      <a href="#auth-flow"><span class="n">07</span>Auth Flow</a>
+      <a href="#query-plans"><span class="n">08</span>Query Plans</a>
+      <a href="#scaling"><span class="n">09</span>Scaling</a>
+      <a href="#glossary"><span class="n">10</span>Glossary</a>
+    </nav>
+    <div class="rail-foot">
+      <div class="theme-switch" role="group" aria-label="Colour theme">
+        <button type="button" data-theme-choice="system" aria-pressed="true">Auto</button>
+        <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+        <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+      </div>
+      <p class="rail-note">Written from <code>server/src/models</code> and <code>server/src/services</code>. Where this page and the code disagree, the code is right.</p>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div class="page">
+      <noscript>
+        <p class="callout warn">Diagrams, the index filter and the slot example need JavaScript. Everything else on this page works without it.</p>
+      </noscript>
+
+      <header class="masthead">
+        <div class="masthead-top">
+          <p class="eyebrow">EMR appointment module · MongoDB</p>
+          <div class="theme-switch mobile-only" role="group" aria-label="Colour theme">
+            <button type="button" data-theme-choice="system" aria-pressed="true">Auto</button>
+            <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+            <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+          </div>
+        </div>
+        <h1>Database design</h1>
+        <p class="lede">How the EMR appointment module stores its data in MongoDB, and why. Everything here is taken from the Mongoose models in <code>server/src/models</code> and the queries in <code>server/src/services</code>. Where this page and the code disagree, the code is right.</p>
+        <dl class="vitals">
+          <div><dt>collections</dt><dd>8</dd></div>
+          <div><dt>indexes besides <code>_id</code></dt><dd>19</dd></div>
+          <div><dt>stored slots: computed per request</dt><dd>0</dd></div>
+          <div><dt>appointments in the measured dataset</dt><dd>43,260</dd></div>
+        </dl>
+        <p class="source-note">Markdown version: <code>docs/DATABASE_DESIGN.md</code>. Diagrams are drawn by Mermaid 11.4.1, loaded from jsDelivr.</p>
+      </header>
+
+      <!-- 01 Overview -->
+      <section class="section" id="overview" aria-labelledby="overview-title">
+        <div class="section-head"><span class="section-num">01</span><h2 id="overview-title">Overview</h2></div>
+        <dl class="facts">
+          <div>
+            <dt>Database</dt>
+            <dd>MongoDB, through Mongoose. The database name comes from the path in <code>MONGO_URI</code>; <code>.env.example</code> uses <code>emr_appointments</code>.</dd>
+          </div>
+          <div>
+            <dt>Dates and times</dt>
+            <dd>Stored as strings in the clinic's timezone (<code>CLINIC_TIMEZONE</code>, default <code>Asia/Kolkata</code>): dates as <code>"YYYY-MM-DD"</code> and times as <code>"HH:mm"</code>. Timestamps such as <code>createdAt</code> are real <code>Date</code> values.</dd>
+          </div>
+          <div>
+            <dt>Ids</dt>
+            <dd>Every document has an <code>_id</code>, which MongoDB indexes automatically. It is an ObjectId everywhere except in <code>counters</code>, where it is the sequence name.</dd>
+          </div>
+        </dl>
+        <div class="tiles">
+          <a class="tile" href="#col-users"><span class="tile-top"><span class="tile-name">users</span><span class="tile-model">User</span></span><span class="tile-purpose">Staff accounts that can log in: Super Admins, receptionists and doctors</span></a>
+          <a class="tile" href="#col-departments"><span class="tile-top"><span class="tile-name">departments</span><span class="tile-model">Department</span></span><span class="tile-purpose">Clinic departments, such as Cardiology</span></a>
+          <a class="tile" href="#col-doctors"><span class="tile-top"><span class="tile-name">doctors</span><span class="tile-model">Doctor</span></span><span class="tile-purpose">A doctor's profile: department, specialization, slot length and weekly schedule</span></a>
+          <a class="tile" href="#col-patients"><span class="tile-top"><span class="tile-name">patients</span><span class="tile-model">Patient</span></span><span class="tile-purpose">Registered patients, each with a readable code such as <code>PAT-000042</code></span></a>
+          <a class="tile" href="#col-appointments"><span class="tile-top"><span class="tile-name">appointments</span><span class="tile-model">Appointment</span></span><span class="tile-purpose">Booked visits: who, with which doctor, which date and slot, and the status</span></a>
+          <a class="tile" href="#col-counters"><span class="tile-top"><span class="tile-name">counters</span><span class="tile-model">Counter</span></span><span class="tile-purpose">Named sequences that are incremented atomically; used for patient codes</span></a>
+          <a class="tile" href="#col-audit_logs"><span class="tile-top"><span class="tile-name">audit_logs</span><span class="tile-model">AuditLog</span></span><span class="tile-purpose">An append-only record of who did what, and when</span></a>
+          <a class="tile" href="#col-refresh_tokens"><span class="tile-top"><span class="tile-name">refresh_tokens</span><span class="tile-model">RefreshToken</span></span><span class="tile-purpose">Hashes of the refresh tokens that keep users signed in</span></a>
+        </div>
+        <p class="callout">Appointment <strong>slots are not a collection</strong>. They are computed on request from the doctor's schedule (see <a href="#slot-generation">slot generation</a>).</p>
+      </section>
+
+      <!-- 02 ER diagram -->
+      <section class="section" id="er-diagram" aria-labelledby="er-title">
+        <div class="section-head"><span class="section-num">02</span><h2 id="er-title">ER Diagram</h2></div>
+        <p class="measure">Each box is a collection with its fields and their types. <code>PK</code> marks the primary key, <code>FK</code> a reference to another collection, and <code>UK</code> a unique field. Each line is a reference between documents, labelled with the field that holds it. The line ends show cardinality:</p>
+        <ul class="legend">
+          <li><code>||</code> exactly one</li>
+          <li><code>o|</code> zero or one</li>
+          <li><code>o{</code> zero or many</li>
+        </ul>
+        <figure class="figure" data-diagram="er" data-zoom="fit" data-start-centre>
+          <div class="figure-bar">
+            <figcaption>Collections and the references between them</figcaption>
+            <button type="button" class="btn zoom-toggle" aria-pressed="false" hidden>Actual size</button>
+          </div>
+          <div class="figure-canvas" tabindex="0" aria-label="ER diagram of the eight collections"><p class="figure-status">Drawing the diagram…</p></div>
+          <script type="text/plain" class="diagram-source">
+erDiagram
+    users ||--o| doctors : "userId"
+    users ||--o{ appointments : "createdBy"
+    users ||--o{ refresh_tokens : "userId"
+    users |o--o{ audit_logs : "userId"
+    departments ||--o{ doctors : "departmentId"
+    departments ||--o{ appointments : "departmentId"
+    doctors ||--o{ appointments : "doctorId"
+    patients ||--o{ appointments : "patientId"
+
+    users {
+        ObjectId _id PK
+        string name
+        string email UK
+        string passwordHash
+        string role
+        boolean isActive
+        date createdAt
+        date updatedAt
+    }
+    departments {
+        ObjectId _id PK
+        string name UK
+        date createdAt
+        date updatedAt
+    }
+    doctors {
+        ObjectId _id PK
+        ObjectId userId FK, UK
+        ObjectId departmentId FK
+        string name
+        string specialization
+        number slotDurationMinutes
+        DaySchedule[] schedule "embedded"
+        date createdAt
+        date updatedAt
+    }
+    patients {
+        ObjectId _id PK
+        string patientCode UK
+        string name
+        string nameLower
+        string mobile
+        string gender
+        string dateOfBirth
+        date createdAt
+        date updatedAt
+    }
+    appointments {
+        ObjectId _id PK
+        ObjectId patientId FK
+        ObjectId doctorId FK
+        ObjectId departmentId FK
+        ObjectId createdBy FK
+        string date
+        string slotStart
+        string slotEnd
+        string purpose
+        string notes
+        string status
+        date arrivedAt
+        date completedAt
+        date cancelledAt
+        string patientCode "copied"
+        string patientName "copied"
+        string patientNameLower "copied"
+        string patientMobile "copied"
+        string doctorName "copied"
+        date createdAt
+        date updatedAt
+    }
+    counters {
+        string _id PK
+        number seq
+    }
+    audit_logs {
+        ObjectId _id PK
+        ObjectId userId FK
+        string role
+        string action
+        string entity
+        ObjectId entityId
+        object metadata
+        date createdAt
+    }
+    refresh_tokens {
+        ObjectId _id PK
+        ObjectId userId FK
+        string tokenHash UK
+        date expiresAt "TTL"
+        date revokedAt
+        string replacedByHash
+        string userAgent
+        string ip
+        date createdAt
+    }
+          </script>
+        </figure>
+
+        <p class="measure muted">Allowed values, limits and notes for every field are in <a href="#collections">Collections</a>.</p>
+
+        <h3 id="modeling">Relationships and modeling choices</h3>
+        <p class="measure">MongoDB lets you either <strong>reference</strong> another document (store its <code>_id</code>) or <strong>embed</strong> data inside a document. This design embeds only the doctor's schedule. Everything else is referenced, and appointments also keep copies of a few fields they display.</p>
+        <div class="table-wrap mid">
+          <table>
+            <caption class="sr-only">How each relationship is stored</caption>
+            <thead><tr><th scope="col">Relationship</th><th scope="col">How</th><th scope="col">Why</th></tr></thead>
+            <tbody>
+              <tr><td class="nowrap">User 1–1 Doctor</td><td>Referenced: <code>doctors.userId</code>, made unique</td><td>A login account and a clinical profile are different things. Auth reads users; scheduling reads doctors. The unique index enforces one profile per account.</td></tr>
+              <tr><td class="nowrap">Department 1–N Doctor</td><td>Referenced: <code>doctors.departmentId</code></td><td>Many doctors share one department. A page of doctors gets all its department names in one <code>$in</code> query.</td></tr>
+              <tr><td class="nowrap">Doctor's weekly schedule</td><td><strong>Embedded</strong> in the doctor</td><td>See the first card below</td></tr>
+              <tr><td class="nowrap">Patient 1–N Appointment</td><td>Referenced: <code>appointments.patientId</code>, plus copied fields</td><td>A patient can have any number of appointments, so they can't be embedded in the patient</td></tr>
+              <tr><td class="nowrap">Doctor 1–N Appointment</td><td>Referenced: <code>appointments.doctorId</code>, plus <code>doctorName</code></td><td>Same reason, unbounded</td></tr>
+              <tr><td class="nowrap">Department 1–N Appointment</td><td>Referenced: <code>appointments.departmentId</code>, taken from the doctor</td><td>Department filters on the appointment list need no lookup</td></tr>
+              <tr><td class="nowrap">User 1–N Appointment</td><td>Referenced: <code>appointments.createdBy</code></td><td>Records who booked it</td></tr>
+              <tr><td class="nowrap">User 1–N RefreshToken</td><td>Referenced: <code>refresh_tokens.userId</code></td><td>Each signed-in session has one active token at a time, and every rotation adds a new one. Tokens expire on their own (TTL), and all of a user's tokens can be revoked in one update.</td></tr>
+              <tr><td class="nowrap">User 1–N AuditLog</td><td>Referenced and optional: <code>audit_logs.userId</code></td><td>Append-only and growing; a failed login with an unknown email has no user</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="why-grid">
+          <article class="why">
+            <h4>Why the schedule is embedded in the doctor</h4>
+            <ul class="list">
+              <li>It is always read together with the doctor: slot generation and booking need both.</li>
+              <li>It is small and bounded: at most 7 days, each with a few sessions and breaks.</li>
+              <li>It is replaced as a whole (<code>PUT /doctors/:id/schedule</code>), never edited one entry at a time.</li>
+              <li>It is validated as a whole: the rules compare a day's sessions with its breaks.</li>
+            </ul>
+          </article>
+          <article class="why">
+            <h4>Why appointments copy patientName, patientMobile and doctorName</h4>
+            <p>The appointment list is the busiest screen. It searches by patient name and mobile, filters and sorts, and shows names. With copies on the appointment, one query answers all of that from indexes. Without them, every list request would need a <code>$lookup</code> (a join) into <code>patients</code> and <code>doctors</code> before it could filter or sort.</p>
+            <ul class="list">
+              <li><code>patientCode</code> is copied too, for display.</li>
+              <li><code>patientNameLower</code> is a lowercase copy kept up to date by a small schema plugin, so case-insensitive prefix search can use an index.</li>
+              <li><strong>The trade-off:</strong> if a patient's name or a doctor's name changed later, old appointments would keep the old value. This module has no flows that edit those fields. If it gets them, a background job can update the copies.</li>
+            </ul>
+          </article>
+          <article class="why">
+            <h4>Why slots are generated on the fly, not stored</h4>
+            <p>A slot is <em>derived</em> data: it follows from the doctor's schedule, the slot length and the date.</p>
+            <ul class="list">
+              <li><strong>Stored slots would go stale.</strong> Every schedule change would mean regenerating future slots and keeping them in sync with bookings, and every cancellation would have to "free" a stored slot.</li>
+              <li><strong>Computed slots stay correct.</strong> They are always right for the current schedule, and a cancelled appointment frees its slot automatically, because the unique index ignores cancelled appointments.</li>
+              <li><strong>It's cheap.</strong> Computing them costs two indexed queries per request (the doctor and that day's appointments) plus a pure function that is fully unit-tested.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <!-- 03 Collections -->
+      <section class="section" id="collections" aria-labelledby="collections-title">
+        <div class="section-head"><span class="section-num">03</span><h2 id="collections-title">Collections</h2></div>
+        <div class="toolbar">
+          <p class="muted">Mongoose also adds a version key, <code>__v</code>, to every collection except <code>counters</code>. It is left out of the tables below. "Auto" means that Mongoose or MongoDB fills the field in.</p>
+          <button type="button" class="btn" id="toggle-cards">Expand all</button>
+        </div>
+
+        <div class="cards">
+          <details class="card" id="col-users">
+            <summary>
+              <span class="chev" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <span class="card-title"><span class="card-name">users</span><span class="card-model">User</span></span>
+              <span class="card-meta">8 fields · 2 indexes</span>
+              <span class="card-purpose">Staff accounts that can log in: Super Admins, receptionists and doctors</span>
+            </summary>
+            <div class="card-body">
+              <div class="table-wrap mid">
+                <table>
+                  <caption class="sr-only">Fields of users</caption>
+                  <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Notes</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>_id</code></td><td>ObjectId</td><td><span class="req soft">auto</span></td><td></td></tr>
+                    <tr><td><code>name</code></td><td>String</td><td><span class="req">yes</span></td><td>Trimmed, at most 100 characters</td></tr>
+                    <tr><td><code>email</code></td><td>String</td><td><span class="req">yes</span></td><td><strong>Unique.</strong> Stored lowercase and trimmed, at most 254 characters</td></tr>
+                    <tr><td><code>passwordHash</code></td><td>String</td><td><span class="req">yes</span></td><td>bcrypt hash. <code>select: false</code>, so queries leave it out unless asked; only the login check asks. <code>toJSON</code> removes it too.</td></tr>
+                    <tr><td><code>role</code></td><td>String</td><td><span class="req">yes</span></td><td><code>SUPER_ADMIN</code>, <code>RECEPTIONIST</code> or <code>DOCTOR</code></td></tr>
+                    <tr><td><code>isActive</code></td><td>Boolean</td><td><span class="req">yes</span></td><td>Default <code>true</code>. An inactive user can't log in or refresh.</td></tr>
+                    <tr><td><code>createdAt</code>, <code>updatedAt</code></td><td>Date</td><td><span class="req soft">auto</span></td><td>Timestamps</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="kicker">Sample document</p>
+<pre><code class="sample">{
+  _id: ObjectId('6abde1c8c1d2e3f4a50b1d10'),
+  name: 'Dr. Kavya Mehta',
+  email: 'kavya.mehta@clinic.example',
+  passwordHash: '$2b$12$C6UzMDM.H6dfI/f/IKcEeO5vXc7d1nZ5w0F2Jk9qT3eL8yYx1aB2C',
+  role: 'DOCTOR',
+  isActive: true,
+  createdAt: ISODate('2026-10-01T04:30:00.000Z'),
+  updatedAt: ISODate('2026-10-01T04:30:00.000Z'),
+  __v: 0
+}</code></pre>
+            </div>
+          </details>
+
+          <details class="card" id="col-departments">
+            <summary>
+              <span class="chev" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <span class="card-title"><span class="card-name">departments</span><span class="card-model">Department</span></span>
+              <span class="card-meta">4 fields · 2 indexes</span>
+              <span class="card-purpose">Clinic departments, such as Cardiology</span>
+            </summary>
+            <div class="card-body">
+              <div class="table-wrap mid">
+                <table>
+                  <caption class="sr-only">Fields of departments</caption>
+                  <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Notes</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>_id</code></td><td>ObjectId</td><td><span class="req soft">auto</span></td><td></td></tr>
+                    <tr><td><code>name</code></td><td>String</td><td><span class="req">yes</span></td><td><strong>Unique, ignoring case</strong>: "Cardiology" and "cardiology" can't both exist. Trimmed, at most 100 characters.</td></tr>
+                    <tr><td><code>createdAt</code>, <code>updatedAt</code></td><td>Date</td><td><span class="req soft">auto</span></td><td>Timestamps</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="kicker">Sample document</p>
+<pre><code class="sample">{
+  _id: ObjectId('6ab9d830c1d2e3f4a50b1c01'),
+  name: 'Cardiology',
+  createdAt: ISODate('2026-09-28T03:00:00.000Z'),
+  updatedAt: ISODate('2026-09-28T03:00:00.000Z'),
+  __v: 0
+}</code></pre>
+            </div>
+          </details>
+
+          <details class="card" id="col-doctors">
+            <summary>
+              <span class="chev" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <span class="card-title"><span class="card-name">doctors</span><span class="card-model">Doctor</span></span>
+              <span class="card-meta">9 fields · 3 indexes</span>
+              <span class="card-purpose">A doctor's profile: department, specialization, slot length and weekly schedule</span>
+            </summary>
+            <div class="card-body">
+              <div class="table-wrap mid">
+                <table>
+                  <caption class="sr-only">Fields of doctors</caption>
+                  <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Notes</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>_id</code></td><td>ObjectId</td><td><span class="req soft">auto</span></td><td>The doctor's id, used in appointments and slot queries</td></tr>
+                    <tr><td><code>userId</code></td><td>ObjectId → <code>users</code></td><td><span class="req">yes</span></td><td><strong>Unique</strong>: one profile per user account</td></tr>
+                    <tr><td><code>departmentId</code></td><td>ObjectId → <code>departments</code></td><td><span class="req">yes</span></td><td></td></tr>
+                    <tr><td><code>name</code></td><td>String</td><td><span class="req">yes</span></td><td>Copied from the user account. Trimmed, at most 100 characters.</td></tr>
+                    <tr><td><code>specialization</code></td><td>String</td><td><span class="req">yes</span></td><td>Trimmed, at most 100 characters</td></tr>
+                    <tr><td><code>slotDurationMinutes</code></td><td>Number</td><td><span class="req">yes</span></td><td>A whole number from 5 to 240</td></tr>
+                    <tr><td><code>schedule</code></td><td>Array of day objects</td><td><span class="req soft">no</span></td><td>Default <code>[]</code>, which means no working days. <strong>Embedded.</strong> The whole array is checked by <code>findScheduleProblems</code> (see below).</td></tr>
+                    <tr><td><code>schedule[].dayOfWeek</code></td><td>Number</td><td><span class="req">yes</span></td><td>0 = Sunday to 6 = Saturday. Each day appears at most once.</td></tr>
+                    <tr><td><code>schedule[].sessions</code></td><td>Array of <code>{ start, end }</code></td><td><span class="req soft">no</span></td><td>Working hours as <code>"HH:mm"</code>. At least one per listed day, none overlapping.</td></tr>
+                    <tr><td><code>schedule[].breaks</code></td><td>Array of <code>{ start, end }</code></td><td><span class="req soft">no</span></td><td>Must fall within that day's working hours, and may not overlap each other</td></tr>
+                    <tr><td><code>createdAt</code>, <code>updatedAt</code></td><td>Date</td><td><span class="req soft">auto</span></td><td>Timestamps</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="muted">The embedded day and time-range objects have no <code>_id</code> of their own (<code>_id: false</code>). The schedule rules:</p>
+              <ul class="list">
+                <li>Each listed day has at least one session.</li>
+                <li>Every range starts before it ends.</li>
+                <li>Sessions don't overlap, and neither do breaks. Ranges are half-open, so 09:00–12:00 and 12:00–13:00 touch without overlapping.</li>
+                <li>A break falls between the day's first session start and its last session end. It may sit in the gap between two sessions.</li>
+              </ul>
+              <p class="kicker">Sample document</p>
+<pre><code class="sample">{
+  _id: ObjectId('6abde1c8c1d2e3f4a50b1d11'),
+  userId: ObjectId('6abde1c8c1d2e3f4a50b1d10'),
+  departmentId: ObjectId('6ab9d830c1d2e3f4a50b1c01'),
+  name: 'Dr. Kavya Mehta',
+  specialization: 'Interventional Cardiology',
+  slotDurationMinutes: 15,
+  schedule: [
+    {
+      dayOfWeek: 1,
+      sessions: [ { start: '09:00', end: '12:00' }, { start: '13:00', end: '17:00' } ],
+      breaks: [ { start: '12:00', end: '13:00' } ]
+    },
+    {
+      dayOfWeek: 3,
+      sessions: [ { start: '10:00', end: '14:00' } ],
+      breaks: []
+    }
+  ],
+  createdAt: ISODate('2026-10-01T04:30:00.000Z'),
+  updatedAt: ISODate('2026-10-05T06:12:40.000Z'),
+  __v: 0
+}</code></pre>
+            </div>
+          </details>
+
+          <details class="card" id="col-patients">
+            <summary>
+              <span class="chev" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <span class="card-title"><span class="card-name">patients</span><span class="card-model">Patient</span></span>
+              <span class="card-meta">9 fields · 4 indexes</span>
+              <span class="card-purpose">Registered patients, each with a readable code such as PAT-000042</span>
+            </summary>
+            <div class="card-body">
+              <div class="table-wrap mid">
+                <table>
+                  <caption class="sr-only">Fields of patients</caption>
+                  <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Notes</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>_id</code></td><td>ObjectId</td><td><span class="req soft">auto</span></td><td></td></tr>
+                    <tr><td><code>patientCode</code></td><td>String</td><td><span class="req">yes</span></td><td><strong>Unique.</strong> For example <code>PAT-000042</code>, numbered by the <code>patientCode</code> counter.</td></tr>
+                    <tr><td><code>name</code></td><td>String</td><td><span class="req">yes</span></td><td>Trimmed, at most 100 characters</td></tr>
+                    <tr><td><code>nameLower</code></td><td>String</td><td><span class="req">yes</span></td><td>A lowercase copy of <code>name</code>, set automatically before every validation. Used for prefix search.</td></tr>
+                    <tr><td><code>mobile</code></td><td>String</td><td><span class="req">yes</span></td><td>10 digits starting with 6–9, normalized before saving. <strong>Not unique</strong>, because families often share a phone.</td></tr>
+                    <tr><td><code>gender</code></td><td>String</td><td><span class="req">yes</span></td><td><code>MALE</code>, <code>FEMALE</code> or <code>OTHER</code></td></tr>
+                    <tr><td><code>dateOfBirth</code></td><td>String</td><td><span class="req soft">no</span></td><td><code>"YYYY-MM-DD"</code>. The booking validator also rejects future dates.</td></tr>
+                    <tr><td><code>createdAt</code>, <code>updatedAt</code></td><td>Date</td><td><span class="req soft">auto</span></td><td>Timestamps</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="kicker">Sample document</p>
+<pre><code class="sample">{
+  _id: ObjectId('6ac8bba3c1d2e3f4a50b1e20'),
+  patientCode: 'PAT-000042',
+  name: 'Asha Rao',
+  nameLower: 'asha rao',
+  mobile: '9876543210',
+  gender: 'FEMALE',
+  dateOfBirth: '1990-05-14',
+  createdAt: ISODate('2026-10-09T10:02:11.000Z'),
+  updatedAt: ISODate('2026-10-09T10:02:11.000Z'),
+  __v: 0
+}</code></pre>
+            </div>
+          </details>
+
+          <details class="card" id="col-appointments" open>
+            <summary>
+              <span class="chev" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <span class="card-title"><span class="card-name">appointments</span><span class="card-model">Appointment</span></span>
+              <span class="card-meta">21 fields · 8 indexes</span>
+              <span class="card-purpose">Booked visits: who, with which doctor, which date and slot, and the status</span>
+            </summary>
+            <div class="card-body">
+              <div class="table-wrap mid">
+                <table>
+                  <caption class="sr-only">Fields of appointments</caption>
+                  <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Notes</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>_id</code></td><td>ObjectId</td><td><span class="req soft">auto</span></td><td></td></tr>
+                    <tr><td><code>patientId</code></td><td>ObjectId → <code>patients</code></td><td><span class="req">yes</span></td><td></td></tr>
+                    <tr><td><code>doctorId</code></td><td>ObjectId → <code>doctors</code></td><td><span class="req">yes</span></td><td></td></tr>
+                    <tr><td><code>departmentId</code></td><td>ObjectId → <code>departments</code></td><td><span class="req">yes</span></td><td>Always copied from the doctor at booking. A <code>departmentId</code> sent by the client is only checked against it (422 if it differs).</td></tr>
+                    <tr><td><code>date</code></td><td>String</td><td><span class="req">yes</span></td><td><code>"YYYY-MM-DD"</code> in the clinic's timezone</td></tr>
+                    <tr><td><code>slotStart</code></td><td>String</td><td><span class="req">yes</span></td><td><code>"HH:mm"</code>. Must be a slot the doctor's schedule offers.</td></tr>
+                    <tr><td><code>slotEnd</code></td><td>String</td><td><span class="req">yes</span></td><td><code>"HH:mm"</code>. Computed from the slot, never sent by the client.</td></tr>
+                    <tr><td><code>purpose</code></td><td>String</td><td><span class="req">yes</span></td><td>Trimmed, at most 200 characters</td></tr>
+                    <tr><td><code>notes</code></td><td>String</td><td><span class="req soft">no</span></td><td>Consultation notes. Default <code>""</code>, at most 2000 characters.</td></tr>
+                    <tr><td><code>status</code></td><td>String</td><td><span class="req">yes</span></td><td><code>SCHEDULED</code>, <code>ARRIVED</code>, <code>COMPLETED</code> or <code>CANCELLED</code>. Default <code>SCHEDULED</code>.</td></tr>
+                    <tr><td><code>createdBy</code></td><td>ObjectId → <code>users</code></td><td><span class="req">yes</span></td><td>The staff member who booked it</td></tr>
+                    <tr><td><code>arrivedAt</code>, <code>completedAt</code>, <code>cancelledAt</code></td><td>Date</td><td><span class="req soft">no</span></td><td>Set by the matching status change</td></tr>
+                    <tr><td><code>patientCode</code>, <code>patientName</code>, <code>patientMobile</code></td><td>String</td><td><span class="req">yes</span></td><td><strong>Copied</strong> from the patient at booking time</td></tr>
+                    <tr><td><code>patientNameLower</code></td><td>String</td><td><span class="req">yes</span></td><td>Lowercase copy of <code>patientName</code>, set automatically</td></tr>
+                    <tr><td><code>doctorName</code></td><td>String</td><td><span class="req">yes</span></td><td><strong>Copied</strong> from the doctor at booking time</td></tr>
+                    <tr><td><code>createdAt</code>, <code>updatedAt</code></td><td>Date</td><td><span class="req soft">auto</span></td><td>Timestamps</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="kicker">Sample document</p>
+<pre><code class="sample">{
+  _id: ObjectId('6ac8bba3c1d2e3f4a50b1e21'),
+  patientId: ObjectId('6ac8bba3c1d2e3f4a50b1e20'),
+  doctorId: ObjectId('6abde1c8c1d2e3f4a50b1d11'),
+  departmentId: ObjectId('6ab9d830c1d2e3f4a50b1c01'),
+  date: '2026-10-12',
+  slotStart: '09:15',
+  slotEnd: '09:30',
+  purpose: 'Follow-up after ECG',
+  notes: 'BP 130/85. Review in two weeks.',
+  status: 'COMPLETED',
+  createdBy: ObjectId('6ab9d95cc1d2e3f4a50b1c09'),
+  arrivedAt: ISODate('2026-10-12T03:41:05.000Z'),
+  completedAt: ISODate('2026-10-12T04:02:47.000Z'),
+  patientCode: 'PAT-000042',
+  patientName: 'Asha Rao',
+  patientNameLower: 'asha rao',
+  patientMobile: '9876543210',
+  doctorName: 'Dr. Kavya Mehta',
+  createdAt: ISODate('2026-10-09T10:02:11.000Z'),
+  updatedAt: ISODate('2026-10-12T04:02:47.000Z'),
+  __v: 0
+}</code></pre>
+              <p class="muted">This is Asha Rao's 09:15 visit on Monday 12 October 2026, booked on 9 October. Stored times are UTC, so <code>arrivedAt</code> is 09:11 and <code>completedAt</code> is 09:32 in Asia/Kolkata. Monday is day 1 in Dr. Mehta's schedule above, and 09:15–09:30 is one of its 15-minute slots.</p>
+            </div>
+          </details>
+
+          <details class="card" id="col-counters">
+            <summary>
+              <span class="chev" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <span class="card-title"><span class="card-name">counters</span><span class="card-model">Counter</span></span>
+              <span class="card-meta">2 fields · 1 index</span>
+              <span class="card-purpose">Named sequences that are incremented atomically; used for patient codes</span>
+            </summary>
+            <div class="card-body">
+              <div class="table-wrap mid">
+                <table>
+                  <caption class="sr-only">Fields of counters</caption>
+                  <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Notes</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>_id</code></td><td>String</td><td><span class="req">yes</span></td><td>The sequence name. Today there is one: <code>patientCode</code>.</td></tr>
+                    <tr><td><code>seq</code></td><td>Number</td><td><span class="req">yes</span></td><td>The last number handed out. Default <code>0</code>.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="muted">The schema turns off the version key, so there is no <code>__v</code>.</p>
+              <p class="kicker">Sample document</p>
+<pre><code class="sample">{ _id: 'patientCode', seq: 42 }</code></pre>
+            </div>
+          </details>
+
+          <details class="card" id="col-audit_logs">
+            <summary>
+              <span class="chev" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <span class="card-title"><span class="card-name">audit_logs</span><span class="card-model">AuditLog</span></span>
+              <span class="card-meta">8 fields · 3 indexes</span>
+              <span class="card-purpose">An append-only record of who did what, and when</span>
+            </summary>
+            <div class="card-body">
+              <div class="table-wrap mid">
+                <table>
+                  <caption class="sr-only">Fields of audit_logs</caption>
+                  <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Notes</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>_id</code></td><td>ObjectId</td><td><span class="req soft">auto</span></td><td></td></tr>
+                    <tr><td><code>userId</code></td><td>ObjectId → <code>users</code></td><td><span class="req soft">no</span></td><td>Who acted. Missing for a failed login with an unknown email.</td></tr>
+                    <tr><td><code>role</code></td><td>String</td><td><span class="req soft">no</span></td><td>The actor's role, when known</td></tr>
+                    <tr><td><code>action</code></td><td>String</td><td><span class="req">yes</span></td><td><code>LOGIN</code>, <code>LOGIN_FAILED</code>, <code>LOGOUT</code>, <code>REFRESH_TOKEN_REUSE</code>, <code>CREATE</code>, <code>UPDATE</code>, <code>CANCEL</code>, <code>ARRIVE</code> or <code>COMPLETE</code></td></tr>
+                    <tr><td><code>entity</code></td><td>String</td><td><span class="req">yes</span></td><td><code>USER</code>, <code>DOCTOR</code>, <code>PATIENT</code> or <code>APPOINTMENT</code></td></tr>
+                    <tr><td><code>entityId</code></td><td>ObjectId</td><td><span class="req soft">no</span></td><td>The record that was acted on</td></tr>
+                    <tr><td><code>metadata</code></td><td>Object</td><td><span class="req soft">no</span></td><td>Extra context, such as the attempted email, the reason, the IP and user agent, or the changed field names. Never secrets or clinical text.</td></tr>
+                    <tr><td><code>createdAt</code></td><td>Date</td><td><span class="req soft">auto</span></td><td>There is no <code>updatedAt</code>, because entries are never edited</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="kicker">Sample document</p>
+<pre><code class="sample">{
+  _id: ObjectId('6ac8bba3c1d2e3f4a50b1e23'),
+  userId: ObjectId('6ab9d95cc1d2e3f4a50b1c09'),
+  role: 'RECEPTIONIST',
+  action: 'CREATE',
+  entity: 'APPOINTMENT',
+  entityId: ObjectId('6ac8bba3c1d2e3f4a50b1e21'),
+  metadata: { doctorId: '6abde1c8c1d2e3f4a50b1d11', date: '2026-10-12', slotStart: '09:15' },
+  createdAt: ISODate('2026-10-09T10:02:11.000Z'),
+  __v: 0
+}</code></pre>
+            </div>
+          </details>
+
+          <details class="card" id="col-refresh_tokens">
+            <summary>
+              <span class="chev" aria-hidden="true"><svg viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <span class="card-title"><span class="card-name">refresh_tokens</span><span class="card-model">RefreshToken</span></span>
+              <span class="card-meta">9 fields · 4 indexes</span>
+              <span class="card-purpose">Hashes of the refresh tokens that keep users signed in</span>
+            </summary>
+            <div class="card-body">
+              <div class="table-wrap mid">
+                <table>
+                  <caption class="sr-only">Fields of refresh_tokens</caption>
+                  <thead><tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Required</th><th scope="col">Notes</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>_id</code></td><td>ObjectId</td><td><span class="req soft">auto</span></td><td></td></tr>
+                    <tr><td><code>userId</code></td><td>ObjectId → <code>users</code></td><td><span class="req">yes</span></td><td></td></tr>
+                    <tr><td><code>tokenHash</code></td><td>String</td><td><span class="req">yes</span></td><td><strong>Unique.</strong> The SHA-256 hash of the refresh token, never the token itself.</td></tr>
+                    <tr><td><code>expiresAt</code></td><td>Date</td><td><span class="req">yes</span></td><td><strong>TTL</strong>: MongoDB deletes the document after this time</td></tr>
+                    <tr><td><code>revokedAt</code></td><td>Date</td><td><span class="req soft">no</span></td><td>Set at logout, at rotation, when all of a user's sessions are revoked, or when a deactivated user tries to refresh</td></tr>
+                    <tr><td><code>replacedByHash</code></td><td>String</td><td><span class="req soft">no</span></td><td>Set at rotation: the hash of the token that replaced this one</td></tr>
+                    <tr><td><code>userAgent</code></td><td>String</td><td><span class="req soft">no</span></td><td>At most 500 characters</td></tr>
+                    <tr><td><code>ip</code></td><td>String</td><td><span class="req soft">no</span></td><td>At most 100 characters</td></tr>
+                    <tr><td><code>createdAt</code></td><td>Date</td><td><span class="req soft">auto</span></td><td>There is no <code>updatedAt</code></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="kicker">Sample document</p>
+<pre><code class="sample">{
+  _id: ObjectId('6ad347a3c1d2e3f4a50b1f40'),
+  userId: ObjectId('6ab9d95cc1d2e3f4a50b1c09'),
+  tokenHash: '05437a6b2f3518d8e500cb45e9c7b48964ff845a798c3e164ecd31ed5251aa4c',
+  expiresAt: ISODate('2026-10-24T10:02:11.000Z'),
+  revokedAt: ISODate('2026-10-17T10:17:30.000Z'),
+  replacedByHash: '9b1f6c0e2d7a4c58e3b2f1a0d9c8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706',
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+  ip: '10.0.0.24',
+  createdAt: ISODate('2026-10-17T10:02:11.000Z'),
+  __v: 0
+}</code></pre>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <!-- 04 Indexes -->
+      <section class="section" id="indexes" aria-labelledby="indexes-title">
+        <div class="section-head"><span class="section-num">04</span><h2 id="indexes-title">Indexes</h2></div>
+        <p class="measure">An index lets MongoDB find documents without reading the whole collection. Every collection also has the automatic unique index on <code>_id</code>. These indexes were read back from a running database (MongoDB 8.2.6), not just copied from the code.</p>
+
+        <div class="filters" role="search" aria-label="Filter indexes">
+          <label class="search">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <span class="sr-only">Search indexes</span>
+            <input type="search" id="index-search" placeholder="Search fields, queries or reasons, such as slotStart or login" autocomplete="off">
+          </label>
+          <div class="chip-row" role="group" aria-label="Collection">
+            <span class="kicker">Collection</span>
+            <button type="button" class="chip" data-filter-collection="all" aria-pressed="true">All</button>
+            <button type="button" class="chip mono" data-filter-collection="appointments" aria-pressed="false">appointments</button>
+            <button type="button" class="chip mono" data-filter-collection="patients" aria-pressed="false">patients</button>
+            <button type="button" class="chip mono" data-filter-collection="doctors" aria-pressed="false">doctors</button>
+            <button type="button" class="chip mono" data-filter-collection="users" aria-pressed="false">users</button>
+            <button type="button" class="chip mono" data-filter-collection="departments" aria-pressed="false">departments</button>
+            <button type="button" class="chip mono" data-filter-collection="refresh_tokens" aria-pressed="false">refresh_tokens</button>
+            <button type="button" class="chip mono" data-filter-collection="audit_logs" aria-pressed="false">audit_logs</button>
+            <button type="button" class="chip mono" data-filter-collection="counters" aria-pressed="false">counters</button>
+          </div>
+          <div class="chip-row" role="group" aria-label="Index type">
+            <span class="kicker">Type</span>
+            <button type="button" class="chip" data-filter-type="all" aria-pressed="true">All</button>
+            <button type="button" class="chip" data-filter-type="unique" aria-pressed="false">Unique</button>
+            <button type="button" class="chip" data-filter-type="partial" aria-pressed="false">Partial</button>
+            <button type="button" class="chip" data-filter-type="compound" aria-pressed="false">Compound</button>
+            <button type="button" class="chip" data-filter-type="single" aria-pressed="false">Single field</button>
+            <button type="button" class="chip" data-filter-type="ttl" aria-pressed="false">TTL</button>
+          </div>
+          <p class="filter-count" id="index-count" aria-live="polite">20 of 20 indexes</p>
+        </div>
+
+        <div class="table-wrap wide">
+          <table id="index-table">
+            <caption class="sr-only">Every index, the query it serves and why it exists</caption>
+            <thead><tr><th scope="col">Collection</th><th scope="col">Index (name)</th><th scope="col">Type</th><th scope="col">Query it serves</th><th scope="col">Why it is needed</th></tr></thead>
+            <tbody>
+              <tr data-collection="users" data-types="unique single">
+                <td><a href="#col-users"><code>users</code></a></td>
+                <td><code>{ email: 1 }</code><span class="index-name">email_1</span></td>
+                <td><span class="badges"><span class="badge accent">unique</span></span></td>
+                <td>Login: <code>findOne({ email })</code></td>
+                <td>Fast login lookup, and one account per email (emails are stored lowercase)</td>
+              </tr>
+              <tr data-collection="departments" data-types="unique single">
+                <td><a href="#col-departments"><code>departments</code></a></td>
+                <td><code>{ name: 1 }</code><span class="index-name">name_1</span></td>
+                <td><span class="badges"><span class="badge accent">unique</span><span class="badge">collation en, strength 2</span></span></td>
+                <td>List all departments, sorted by name with the same collation; the seed script's upsert by name</td>
+                <td>Prevents "Cardiology" and "cardiology" from both existing</td>
+              </tr>
+              <tr data-collection="doctors" data-types="unique single">
+                <td><a href="#col-doctors"><code>doctors</code></a></td>
+                <td><code>{ userId: 1 }</code><span class="index-name">userId_1</span></td>
+                <td><span class="badges"><span class="badge accent">unique</span></span></td>
+                <td>At login and refresh: <code>findOne({ userId })</code>, to put the doctor's id in the token</td>
+                <td>One profile per user</td>
+              </tr>
+              <tr data-collection="doctors" data-types="compound">
+                <td><a href="#col-doctors"><code>doctors</code></a></td>
+                <td><code>{ departmentId: 1, name: 1 }</code><span class="index-name">departmentId_1_name_1</span></td>
+                <td><span class="badges"><span class="badge">compound</span></span></td>
+                <td>Doctor list: <code>find({ departmentId })</code> sorted by <code>{ name: 1 }</code></td>
+                <td>Filter by department and sort by name from one index</td>
+              </tr>
+              <tr data-collection="patients" data-types="unique single">
+                <td><a href="#col-patients"><code>patients</code></a></td>
+                <td><code>{ patientCode: 1 }</code><span class="index-name">patientCode_1</span></td>
+                <td><span class="badges"><span class="badge accent">unique</span></span></td>
+                <td>Search by code: <code>find({ patientCode: 'PAT-000042' })</code></td>
+                <td>Codes are unique, and staff look patients up by them</td>
+              </tr>
+              <tr data-collection="patients" data-types="single">
+                <td><a href="#col-patients"><code>patients</code></a></td>
+                <td><code>{ mobile: 1 }</code><span class="index-name">mobile_1</span></td>
+                <td><span class="badges"><span class="badge">single field</span></span></td>
+                <td>Search by mobile: <code>find({ mobile: /^98765/ })</code></td>
+                <td>Anchored prefix match while typing</td>
+              </tr>
+              <tr data-collection="patients" data-types="single">
+                <td><a href="#col-patients"><code>patients</code></a></td>
+                <td><code>{ nameLower: 1 }</code><span class="index-name">nameLower_1</span></td>
+                <td><span class="badges"><span class="badge">single field</span></span></td>
+                <td>Search by name: <code>find({ nameLower: /^asha/ })</code></td>
+                <td>Case-insensitive prefix match using the lowercase copy</td>
+              </tr>
+              <tr data-collection="appointments" data-types="unique partial compound">
+                <td><a href="#col-appointments"><code>appointments</code></a></td>
+                <td><code>{ doctorId: 1, date: 1, slotStart: 1 }</code><span class="index-name">uniq_active_doctor_slot</span></td>
+                <td><span class="badges"><span class="badge key">partial unique</span><span class="badge">compound</span></span></td>
+                <td>Every booking insert; also the slot grid query <code>find({ doctorId, date, status: { $in: [active statuses] } })</code></td>
+                <td><strong>Prevents double booking.</strong> See <a href="#partial-unique-index">below</a>.</td>
+              </tr>
+              <tr data-collection="appointments" data-types="compound">
+                <td><a href="#col-appointments"><code>appointments</code></a></td>
+                <td><code>{ doctorId: 1, date: 1 }</code><span class="index-name">doctorId_1_date_1</span></td>
+                <td><span class="badges"><span class="badge">compound</span></span></td>
+                <td>A doctor's own list, <code>{ doctorId }</code> with an optional date range; the <code>doctorName</code> filter after it becomes <code>{ doctorId: { $in: [...] } }</code></td>
+                <td>The partial index above can't serve queries that don't filter on status</td>
+              </tr>
+              <tr data-collection="appointments" data-types="compound">
+                <td><a href="#col-appointments"><code>appointments</code></a></td>
+                <td><code>{ status: 1, date: 1 }</code><span class="index-name">status_1_date_1</span></td>
+                <td><span class="badges"><span class="badge">compound</span></span></td>
+                <td>List filtered by <code>status</code>, with a date range</td>
+                <td>"Today's SCHEDULED appointments"</td>
+              </tr>
+              <tr data-collection="appointments" data-types="compound">
+                <td><a href="#col-appointments"><code>appointments</code></a></td>
+                <td><code>{ departmentId: 1, date: 1 }</code><span class="index-name">departmentId_1_date_1</span></td>
+                <td><span class="badges"><span class="badge">compound</span></span></td>
+                <td>List filtered by <code>departmentId</code>, with a date range</td>
+                <td>Department view</td>
+              </tr>
+              <tr data-collection="appointments" data-types="compound">
+                <td><a href="#col-appointments"><code>appointments</code></a></td>
+                <td><code>{ date: 1, slotStart: 1 }</code><span class="index-name">date_1_slotStart_1</span></td>
+                <td><span class="badges"><span class="badge">compound</span></span></td>
+                <td>List filtered only by <code>dateFrom</code> and <code>dateTo</code></td>
+                <td>Date range lists. (Not used by the unfiltered default list; see <a href="#query-plans">Query Plans</a>.)</td>
+              </tr>
+              <tr data-collection="appointments" data-types="single">
+                <td><a href="#col-appointments"><code>appointments</code></a></td>
+                <td><code>{ patientMobile: 1 }</code><span class="index-name">patientMobile_1</span></td>
+                <td><span class="badges"><span class="badge">single field</span></span></td>
+                <td>List filter <code>{ patientMobile: /^98765/ }</code></td>
+                <td>Mobile search on the copied field</td>
+              </tr>
+              <tr data-collection="appointments" data-types="single">
+                <td><a href="#col-appointments"><code>appointments</code></a></td>
+                <td><code>{ patientNameLower: 1 }</code><span class="index-name">patientNameLower_1</span></td>
+                <td><span class="badges"><span class="badge">single field</span></span></td>
+                <td>List filter <code>{ patientNameLower: /^asha/ }</code></td>
+                <td>Name search on the copied field</td>
+              </tr>
+              <tr data-collection="audit_logs" data-types="single">
+                <td><a href="#col-audit_logs"><code>audit_logs</code></a></td>
+                <td><code>{ createdAt: -1 }</code><span class="index-name">createdAt_-1</span></td>
+                <td><span class="badges"><span class="badge">single field, descending</span></span></td>
+                <td>No query reads audit logs yet; only writes</td>
+                <td>Prepared for an audit screen: newest activity first</td>
+              </tr>
+              <tr data-collection="audit_logs" data-types="compound">
+                <td><a href="#col-audit_logs"><code>audit_logs</code></a></td>
+                <td><code>{ entity: 1, entityId: 1, createdAt: -1 }</code><span class="index-name">entity_1_entityId_1_createdAt_-1</span></td>
+                <td><span class="badges"><span class="badge">compound</span></span></td>
+                <td>No query reads audit logs yet</td>
+                <td>Prepared for "the history of one record"</td>
+              </tr>
+              <tr data-collection="refresh_tokens" data-types="unique single">
+                <td><a href="#col-refresh_tokens"><code>refresh_tokens</code></a></td>
+                <td><code>{ tokenHash: 1 }</code><span class="index-name">tokenHash_1</span></td>
+                <td><span class="badges"><span class="badge accent">unique</span></span></td>
+                <td>Refresh: <code>findOne({ tokenHash })</code>; logout: <code>findOneAndUpdate({ tokenHash, revokedAt: { $exists: false } })</code></td>
+                <td>Every refresh and logout looks a token up by its hash</td>
+              </tr>
+              <tr data-collection="refresh_tokens" data-types="single">
+                <td><a href="#col-refresh_tokens"><code>refresh_tokens</code></a></td>
+                <td><code>{ userId: 1 }</code><span class="index-name">userId_1</span></td>
+                <td><span class="badges"><span class="badge">single field</span></span></td>
+                <td>Reuse detection: <code>updateMany({ userId, revokedAt: { $exists: false } })</code></td>
+                <td>Revoking all of a user's sessions at once</td>
+              </tr>
+              <tr data-collection="refresh_tokens" data-types="ttl single">
+                <td><a href="#col-refresh_tokens"><code>refresh_tokens</code></a></td>
+                <td><code>{ expiresAt: 1 }</code><span class="index-name">expiresAt_1, expireAfterSeconds: 0</span></td>
+                <td><span class="badges"><span class="badge ok">TTL</span></span></td>
+                <td>The TTL monitor, about once a minute</td>
+                <td>Deletes each token once it has expired</td>
+              </tr>
+              <tr data-collection="counters" data-types="auto">
+                <td><a href="#col-counters"><code>counters</code></a></td>
+                <td><code>_id</code> only</td>
+                <td><span class="badges"><span class="badge">automatic</span></span></td>
+                <td><code>findOneAndUpdate({ _id: 'patientCode' }, { $inc: { seq: 1 } }, { upsert: true })</code></td>
+                <td>Atomic sequence numbers</td>
+              </tr>
+              <tr id="index-empty" hidden><td colspan="5" class="muted">No index matches these filters.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="callout">There is <strong>no text index</strong>. A text index matches whole words and their stems, not prefixes, so it can't answer "names starting with <em>ash</em>" while someone types. A lowercase copy with an anchored regex (<code>/^ash/</code>) on an ordinary index can.</p>
+
+        <h3 id="partial-unique-index">The partial unique index on <code>{ doctorId, date, slotStart }</code></h3>
+<pre><code>appointmentSchema.index(
+  { doctorId: 1, date: 1, slotStart: 1 },
+  {
+    name: 'uniq_active_doctor_slot',
+    unique: true,
+    partialFilterExpression: { status: { $in: ['SCHEDULED', 'ARRIVED', 'COMPLETED'] } },
+  },
+);</code></pre>
+        <ul class="list">
+          <li><strong>Unique</strong> means that no two documents in the index may have the same <code>doctorId</code>, <code>date</code> and <code>slotStart</code>.</li>
+          <li><strong>Partial</strong> means that only documents matching the filter are in the index at all. Appointments with status <code>SCHEDULED</code>, <code>ARRIVED</code> or <code>COMPLETED</code> hold their slot. A <code>CANCELLED</code> appointment drops out of the index, so its slot can be booked again, and any number of cancelled appointments can share one slot.</li>
+          <li><code>COMPLETED</code> stays in the filter, so a slot that was used can't be booked a second time.</li>
+          <li>When an insert would break the rule, MongoDB rejects it with error <strong>E11000 (duplicate key)</strong>, and the API answers <strong>409 "Slot already booked"</strong>.</li>
+          <li>The query planner also uses this index for the slot grid, because that query asks for exactly the statuses in the filter (measured in <a href="#query-plans">Query Plans</a>).</li>
+          <li>At startup the server waits for every index build to finish before it starts listening, so no booking can arrive before this index exists. A failed build is logged as an error.</li>
+        </ul>
+        <p class="kicker">What the index holds for one doctor, date and start time</p>
+        <div class="table-wrap mid">
+          <table>
+            <caption class="sr-only">What the index holds for one doctor, date and start time</caption>
+            <thead><tr><th scope="col">Appointment for Dr. Mehta, 2030-01-15, 13:30</th><th scope="col">In the index?</th><th scope="col">Effect</th></tr></thead>
+            <tbody>
+              <tr><td><span class="status cancelled">CANCELLED</span></td><td>No, filtered out</td><td>Stays on record; the slot is free again</td></tr>
+              <tr><td><span class="status cancelled">CANCELLED</span></td><td>No, filtered out</td><td>Any number of cancelled appointments can share the slot</td></tr>
+              <tr><td><span class="status scheduled">SCHEDULED</span></td><td>Yes</td><td>Holds the slot</td></tr>
+              <tr><td>A second <span class="status scheduled">SCHEDULED</span> insert</td><td>Would be a duplicate key</td><td>Rejected with E11000; the API answers 409 "Slot already booked"</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 05 Booking flow -->
+      <section class="section" id="booking-flow" aria-labelledby="booking-title">
+        <div class="section-head"><span class="section-num">05</span><h2 id="booking-title">Booking Flow</h2></div>
+        <p class="measure">Booking has two halves: the slot grid that shows which times can be booked, and the insert that books one. The insert is where two receptionists can collide, so it comes first.</p>
+
+        <h3 id="double-booking">Double-booking prevention</h3>
+        <p class="measure">Two receptionists press "Book" for the same slot at the same moment. The service inserts directly, and the unique index decides which insert wins:</p>
+        <figure class="figure" data-diagram="booking" data-zoom="fit">
+          <div class="figure-bar">
+            <figcaption>Two simultaneous bookings: one 201, one 409</figcaption>
+            <button type="button" class="btn zoom-toggle" aria-pressed="false" hidden>Actual size</button>
+          </div>
+          <div class="figure-canvas" tabindex="0" aria-label="Sequence diagram of two simultaneous bookings"><p class="figure-status">Drawing the diagram…</p></div>
+          <script type="text/plain" class="diagram-source">
+sequenceDiagram
+    autonumber
+    participant A as Receptionist A
+    participant B as Receptionist B
+    participant API as API (appointment service)
+    participant DB as MongoDB (appointments)
+    par Both book at the same moment
+        A->>API: POST /appointments for Dr. Mehta, 2030-01-15, 13:30
+    and
+        B->>API: POST /appointments for the same doctor, date and slot
+    end
+    API->>API: Both requests pass the schedule check (a real slot, not past)
+    API->>DB: insertOne for request A
+    API->>DB: insertOne for request B
+    DB-->>API: A is stored and takes the index entry
+    DB-->>API: B is rejected with E11000 duplicate key on uniq_active_doctor_slot
+    API-->>A: 201 Created
+    API-->>B: 409 Slot already booked
+          </script>
+        </figure>
+
+        <h3 id="check-then-insert">Why check-then-insert is unsafe</h3>
+        <p class="measure">The obvious approach is "look for an appointment in that slot, and insert if there is none". Two requests can both look before either one inserts:</p>
+        <figure class="figure" data-diagram="race" data-zoom="fit">
+          <div class="figure-bar">
+            <figcaption>The race that check-then-insert loses</figcaption>
+            <button type="button" class="btn zoom-toggle" aria-pressed="false" hidden>Actual size</button>
+          </div>
+          <div class="figure-canvas" tabindex="0" aria-label="Sequence diagram of the check-then-insert race"><p class="figure-status">Drawing the diagram…</p></div>
+          <script type="text/plain" class="diagram-source">
+sequenceDiagram
+    participant A as Request A
+    participant B as Request B
+    participant DB as appointments
+    A->>DB: Is the slot free?
+    B->>DB: Is the slot free?
+    DB-->>A: Yes, nothing booked
+    DB-->>B: Yes, nothing booked
+    A->>DB: insertOne
+    B->>DB: insertOne
+    Note over DB: Without a unique index both inserts succeed, and the slot is double-booked
+          </script>
+        </figure>
+        <p class="measure">The gap between "check" and "insert" is short, but on a busy clinic morning it is enough. A unique index closes it. MongoDB checks and writes the index entry as one atomic step, so exactly one insert can take that entry, however many arrive at once.</p>
+        <ul class="list">
+          <li><strong>Tested through the API:</strong> of 10 bookings sent in parallel for one slot, exactly 1 gets 201 and 9 get 409. After that appointment is cancelled, 9 parallel rebookings of the slot again give exactly one 201.</li>
+          <li><strong>A new patient's booking</strong> creates the patient record and the appointment in one <strong>transaction</strong>. When the slot is taken, the transaction rolls back and no orphan patient is left. Of 5 racing new-patient bookings, exactly one patient record is created (tested).</li>
+        </ul>
+
+        <h3 id="slot-generation">Slot generation</h3>
+        <figure class="figure" data-diagram="slots" data-zoom="fit">
+          <div class="figure-bar">
+            <figcaption>GET /slots: how one doctor's day becomes a slot grid</figcaption>
+            <button type="button" class="btn zoom-toggle" aria-pressed="false" hidden>Actual size</button>
+          </div>
+          <div class="figure-canvas" tabindex="0" aria-label="Flowchart of slot generation"><p class="figure-status">Drawing the diagram…</p></div>
+          <script type="text/plain" class="diagram-source">
+flowchart TD
+    A["GET /slots with doctorId and date"] --> B{"Date in the past?"}
+    B -- yes --> R["422: past date"]
+    B -- no --> C["Load the doctor by _id: schedule and slotDurationMinutes"]
+    C --> H["One query: that day's active appointments, slotStart only"]
+    H --> D{"Weekday in the schedule?"}
+    D -- no --> E["No slots: a day off"]
+    D -- yes --> F["Take that day's sessions and remove the breaks"]
+    F --> G["Cut each free range into back-to-back slots of slotDurationMinutes, dropping a remainder too short for a slot"]
+    G --> I{"Slot already booked?"}
+    I -- yes --> J["BOOKED, with the appointment id"]
+    I -- no --> K{"Has the slot started?"}
+    K -- yes --> L["PAST"]
+    K -- no --> M["AVAILABLE"]
+          </script>
+        </figure>
+
+        <div class="slot-demo" id="slot-demo">
+          <div class="slot-demo-head">
+            <p><strong>Example.</strong> Sessions 09:00–12:00 and 13:00–17:00, with a break from 12:00 to 13:00.</p>
+            <div class="seg" role="group" aria-label="Slot length in minutes">
+              <span class="seg-label">Slot length (min)</span>
+              <button type="button" data-minutes="10" aria-pressed="false">10</button>
+              <button type="button" data-minutes="15" aria-pressed="true">15</button>
+              <button type="button" data-minutes="20" aria-pressed="false">20</button>
+              <button type="button" data-minutes="30" aria-pressed="false">30</button>
+              <button type="button" data-minutes="45" aria-pressed="false">45</button>
+              <button type="button" data-minutes="60" aria-pressed="false">60</button>
+            </div>
+          </div>
+          <div class="timeline" aria-hidden="true">
+            <div class="track" id="slot-track"></div>
+            <div class="ticks" id="slot-ticks"></div>
+          </div>
+          <ul class="slot-key">
+            <li><span class="swatch slot-swatch"></span>Slot</li>
+            <li><span class="swatch break-swatch"></span>Break</li>
+            <li><span class="swatch rem-swatch"></span>Remainder too short for a slot, dropped</li>
+          </ul>
+          <p class="slot-summary" id="slot-summary" aria-live="polite">With 15-minute slots this gives 12 morning slots (09:00 to 11:45) and 16 afternoon slots (13:00 to 16:45). That is 28 slots, none during lunch.</p>
+        </div>
+
+        <ul class="list">
+          <li>If a break doesn't line up with the slot grid, slots restart at the end of the break.</li>
+          <li>"Today" and "now" come from the clinic's timezone (luxon), whatever timezone the server runs in.</li>
+          <li><strong>BOOKED wins over PAST.</strong> A booked slot that has started still shows its appointment id, so a late arrival can be marked.</li>
+          <li><strong>Booking uses the same generator.</strong> The requested start time must be one of these slots, and must not have started.</li>
+        </ul>
+      </section>
+
+      <!-- 06 Status workflow -->
+      <section class="section" id="status-workflow" aria-labelledby="status-title">
+        <div class="section-head"><span class="section-num">06</span><h2 id="status-title">Status Workflow</h2></div>
+        <figure class="figure" data-diagram="status" data-zoom="fit">
+          <div class="figure-bar">
+            <figcaption>Appointment statuses and the requests that move them</figcaption>
+            <button type="button" class="btn zoom-toggle" aria-pressed="false" hidden>Actual size</button>
+          </div>
+          <div class="figure-canvas" tabindex="0" aria-label="State diagram of the appointment status workflow"><p class="figure-status">Drawing the diagram…</p></div>
+          <script type="text/plain" class="diagram-source">
+stateDiagram-v2
+    [*] --> SCHEDULED: booked (POST /appointments)
+    SCHEDULED --> ARRIVED: patient arrives (POST /appointments/{id}/arrive)
+    ARRIVED --> COMPLETED: visit completed (POST /appointments/{id}/complete)
+    SCHEDULED --> CANCELLED: cancelled (DELETE /appointments/{id})
+    ARRIVED --> CANCELLED: cancelled (DELETE /appointments/{id})
+    COMPLETED --> [*]
+    CANCELLED --> [*]
+          </script>
+        </figure>
+        <p class="status-line"><span class="status scheduled">SCHEDULED</span>, <span class="status arrived">ARRIVED</span> and <span class="status completed">COMPLETED</span> hold the slot, because they are in the partial unique index. <span class="status cancelled">CANCELLED</span> frees it.</p>
+        <ul class="list">
+          <li><strong>The only moves allowed</strong> are the arrows above (<code>STATUS_TRANSITIONS</code>). COMPLETED and CANCELLED are final.</li>
+          <li><strong>Every move is one atomic update</strong> whose filter contains the statuses it may start from, for example <code>findOneAndUpdate({ _id, status: { $in: ['SCHEDULED'] } }, { $set: { status: 'ARRIVED', arrivedAt: now } })</code>. If the appointment had already changed, nothing matches and the API answers 409. Of two people acting at once, only one succeeds (tested with two simultaneous cancellations).</li>
+          <li><strong>Each move sets its timestamp</strong> (<code>arrivedAt</code>, <code>completedAt</code> or <code>cancelledAt</code>) and writes an audit entry.</li>
+          <li><strong>Cancelling is soft</strong>: the document stays, and the partial unique index releases the slot.</li>
+        </ul>
+      </section>
+
+      <!-- 07 Auth flow -->
+      <section class="section" id="auth-flow" aria-labelledby="auth-title">
+        <div class="section-head"><span class="section-num">07</span><h2 id="auth-title">Auth Flow</h2></div>
+        <p class="measure">Refresh tokens are stored only as SHA-256 hashes. A leaked database therefore contains no usable token.</p>
+        <figure class="figure" data-diagram="auth" data-zoom="fit">
+          <div class="figure-bar">
+            <figcaption>Login, rotation, reuse detection and TTL cleanup</figcaption>
+            <button type="button" class="btn zoom-toggle" aria-pressed="false" hidden>Actual size</button>
+          </div>
+          <div class="figure-canvas" tabindex="0" aria-label="Sequence diagram of the refresh token lifecycle"><p class="figure-status">Drawing the diagram…</p></div>
+          <script type="text/plain" class="diagram-source">
+sequenceDiagram
+    autonumber
+    participant C as Browser
+    participant API
+    participant RT as refresh_tokens
+    participant TTL as MongoDB TTL monitor
+    C->>API: POST /auth/login with email and password
+    API->>RT: insert tokenHash = sha256(T1),<br/>expiresAt = now + 7 days
+    API-->>C: access token in the body,<br/>T1 in an httpOnly cookie
+    C->>API: POST /auth/refresh, cookie T1
+    API->>RT: findOne by tokenHash = sha256(T1)
+    API->>RT: claim T1 only if not yet revoked:<br/>set revokedAt and replacedByHash = sha256(T2)
+    API->>RT: insert tokenHash = sha256(T2)
+    API-->>C: new access token, T2 in the cookie
+    Note over C,RT: Reuse detection
+    C->>API: POST /auth/refresh with the old cookie T1
+    API->>RT: findOne finds T1 already revoked
+    API->>RT: updateMany for this userId,<br/>revoke every active token
+    API-->>C: 401, cookie cleared
+    Note over TTL,RT: About once a minute
+    TTL->>RT: delete documents whose<br/>expiresAt has passed
+          </script>
+        </figure>
+        <ol class="list">
+          <li><strong>Login</strong> stores the hash of a new refresh token. The token itself goes to the browser in an httpOnly cookie that JavaScript can't read.</li>
+          <li><strong>Refresh</strong> checks the token's JWT signature, looks the token up by its hash, and claims it with a conditional update, so two simultaneous refreshes can't both win. It then stores the replacement's hash. This is <strong>rotation</strong>: every refresh token works once.</li>
+          <li><strong>Reuse detection.</strong> Presenting a token that was already revoked means it was copied. The service revokes <strong>every</strong> session of that user, using the <code>userId</code> index, and writes a <code>REFRESH_TOKEN_REUSE</code> audit entry.</li>
+          <li><strong>TTL cleanup.</strong> Expired tokens are deleted by MongoDB itself, through the TTL index on <code>expiresAt</code>. Until then, revoked tokens stay on record, which is what makes reuse detection possible.</li>
+        </ol>
+      </section>
+
+      <!-- 08 Query plans -->
+      <section class="section" id="query-plans" aria-labelledby="plans-title">
+        <div class="section-head"><span class="section-num">08</span><h2 id="plans-title">Query Plans</h2></div>
+        <div class="prose">
+          <p><strong>How these numbers were measured.</strong> Atlas isn't connected yet, and the seed script creates only departments and an admin. So the plans were measured on a local MongoDB 8.2.6 loaded with a generated dataset, using the real models and indexes:</p>
+          <ul class="list">
+            <li>6 departments and 30 doctors</li>
+            <li>5,000 patients</li>
+            <li>43,260 appointments: 120 days from 2030-01-01, Monday to Saturday, 14 of 28 slots booked per doctor per day, about 10% of them cancelled</li>
+          </ul>
+          <p>The real service functions were run with Mongoose's query capture switched on, and each captured query was run again with <code>explain("executionStats")</code>.</p>
+        </div>
+        <ul class="legend">
+          <li><span class="stage ix">IXSCAN</span> MongoDB used an index</li>
+          <li><span class="stage coll">COLLSCAN</span> MongoDB read every document in the collection</li>
+          <li><span class="stage">SORT</span> sorted in memory after fetching</li>
+          <li><strong>Docs examined vs returned:</strong> how much work was done for how many results. Ideally they're close.</li>
+        </ul>
+        <p class="muted">Every list page returns 20 rows. The bar under each "docs examined" figure uses a log scale, from 1 to 43,260.</p>
+
+        <div class="table-wrap wide">
+          <table id="plan-table">
+            <caption class="sr-only">Winning plans from explain("executionStats") for the main queries</caption>
+            <thead><tr><th scope="col">Query (what the service sends)</th><th scope="col">Index used</th><th scope="col">Winning plan</th><th scope="col" class="num">Docs examined</th><th scope="col" class="num">Returned</th></tr></thead>
+            <tbody>
+              <tr class="group"><th scope="rowgroup" colspan="5">Appointment list</th></tr>
+              <tr class="flag" data-examined="43260">
+                <td><span class="query-name">Default view, no filters</span><br><code>{ $and: [{}] }</code> sorted by <code>{ date, slotStart, _id }</code></td>
+                <td class="muted">none</td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage coll">COLLSCAN</span></span></td>
+                <td class="num"><span class="examined">43,260</span></td>
+                <td class="num">20</td>
+              </tr>
+              <tr data-examined="1513">
+                <td><span class="query-name">Status SCHEDULED, one week</span><br><code>status: 'SCHEDULED'</code> with a date range</td>
+                <td><code>status_1_date_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">1,513</span></td>
+                <td class="num">20</td>
+              </tr>
+              <tr data-examined="420">
+                <td><span class="query-name">Department, one week</span><br><code>departmentId</code> with a date range</td>
+                <td><code>departmentId_1_date_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">420</span></td>
+                <td class="num">20</td>
+              </tr>
+              <tr data-examined="420">
+                <td><span class="query-name">One day</span><br><code>dateFrom</code> = <code>dateTo</code></td>
+                <td><code>date_1_slotStart_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">420</span></td>
+                <td class="num">20</td>
+              </tr>
+              <tr data-examined="2032">
+                <td><span class="query-name">Patient name search</span><br><code>patientNameLower: /^asha/</code></td>
+                <td><code>patientNameLower_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">2,032</span></td>
+                <td class="num">20</td>
+              </tr>
+              <tr data-examined="410">
+                <td><span class="query-name">Mobile search</span><br><code>patientMobile: /^98765/</code></td>
+                <td><code>patientMobile_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">410</span></td>
+                <td class="num">20</td>
+              </tr>
+              <tr data-examined="30">
+                <td><span class="query-name">Doctor name "mehta", step 1</span><br><code>doctors.find({ name: /mehta/i })</code></td>
+                <td class="muted">none</td>
+                <td><span class="plan"><span class="stage coll">COLLSCAN</span></span> <span class="muted">(30 doctors)</span></td>
+                <td class="num"><span class="examined">30</span></td>
+                <td class="num">3</td>
+              </tr>
+              <tr data-examined="4326">
+                <td><span class="query-name">Doctor name "mehta", step 2</span><br><code>{ doctorId: { $in: [3 ids] } }</code></td>
+                <td><code>doctorId_1_date_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">4,326</span></td>
+                <td class="num">20</td>
+              </tr>
+              <tr class="flag" data-examined="43260">
+                <td><span class="query-name">Sorted by patient name, no filters</span><br><code>{ $and: [{}] }</code> sorted by <code>{ patientNameLower, _id }</code></td>
+                <td class="muted">none</td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage coll">COLLSCAN</span></span></td>
+                <td class="num"><span class="examined">43,260</span></td>
+                <td class="num">20</td>
+              </tr>
+            </tbody>
+            <tbody>
+              <tr class="group"><th scope="rowgroup" colspan="5">Doctor-scoped list</th></tr>
+              <tr data-examined="1442">
+                <td><span class="query-name">A doctor's own list</span><br><code>{ $and: [{ doctorId }] }</code></td>
+                <td><code>doctorId_1_date_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">1,442</span></td>
+                <td class="num">20</td>
+              </tr>
+              <tr data-examined="84">
+                <td><span class="query-name">A doctor's own list, one week</span></td>
+                <td><code>doctorId_1_date_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">84</span></td>
+                <td class="num">20</td>
+              </tr>
+            </tbody>
+            <tbody>
+              <tr class="group"><th scope="rowgroup" colspan="5">Slots for a day</th></tr>
+              <tr data-examined="1">
+                <td><span class="query-name">Step 1: the doctor by <code>_id</code></span></td>
+                <td><code>_id_</code></td>
+                <td><span class="plan"><span class="stage ix">EXPRESS_IXSCAN</span></span></td>
+                <td class="num"><span class="examined">1</span></td>
+                <td class="num">1</td>
+              </tr>
+              <tr data-examined="11">
+                <td><span class="query-name">Step 2: that day's active appointments</span><br><code>{ doctorId, date, status: { $in: [active] } }</code></td>
+                <td><code>uniq_active_doctor_slot</code></td>
+                <td><span class="plan"><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">11</span></td>
+                <td class="num">11</td>
+              </tr>
+            </tbody>
+            <tbody>
+              <tr class="group"><th scope="rowgroup" colspan="5">Patient search</th></tr>
+              <tr data-examined="1">
+                <td><span class="query-name">By code</span><br><code>PAT-000042</code></td>
+                <td><code>patientCode_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">1</span></td>
+                <td class="num">1</td>
+              </tr>
+              <tr data-examined="52">
+                <td><span class="query-name">By mobile</span><br><code>mobile: /^98765/</code></td>
+                <td><code>mobile_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">52</span></td>
+                <td class="num">20</td>
+              </tr>
+              <tr data-examined="234">
+                <td><span class="query-name">By name</span><br><code>nameLower: /^asha/</code></td>
+                <td><code>nameLower_1</code></td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage">FETCH</span><span class="arrow">←</span><span class="stage ix">IXSCAN</span></span></td>
+                <td class="num"><span class="examined">234</span></td>
+                <td class="num">20</td>
+              </tr>
+              <tr class="flag" data-examined="5000">
+                <td><span class="query-name">Patient list, no search term</span><br><code>{}</code> sorted by <code>{ nameLower, _id }</code></td>
+                <td class="muted">none</td>
+                <td><span class="plan"><span class="stage">SORT</span><span class="arrow">←</span><span class="stage coll">COLLSCAN</span></span></td>
+                <td class="num"><span class="examined">5,000</span></td>
+                <td class="num">20</td>
+              </tr>
+            </tbody>
+            <tbody>
+              <tr class="group"><th scope="rowgroup" colspan="5">Auth</th></tr>
+              <tr data-examined="1">
+                <td><span class="query-name">Login</span><br><code>users.findOne({ email })</code></td>
+                <td><code>email_1</code></td>
+                <td><span class="plan"><span class="stage ix">EXPRESS_IXSCAN</span></span></td>
+                <td class="num"><span class="examined">1</span></td>
+                <td class="num">1</td>
+              </tr>
+              <tr data-examined="1">
+                <td><span class="query-name">Refresh</span><br><code>refresh_tokens.findOne({ tokenHash })</code></td>
+                <td><code>tokenHash_1</code></td>
+                <td><span class="plan"><span class="stage ix">EXPRESS_IXSCAN</span></span></td>
+                <td class="num"><span class="examined">1</span></td>
+                <td class="num">1</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="measure">Each list also runs <code>countDocuments</code> with the same filter, for the page total. Filtered counts read only the index (COUNT_SCAN or IXSCAN, 0 documents examined); the patient-code count examines its one document. The three unfiltered lists count with a COLLSCAN: 43,260, 43,260 and 5,000 documents.</p>
+
+        <h3 id="collscan-flags">COLLSCAN flags</h3>
+        <ol class="list">
+          <li><strong>The default appointment list (no filters) is a COLLSCAN.</strong> This is the most important finding, because it is the default view.
+            <ul>
+              <li><strong>Cause:</strong> the sort is <code>{ date, slotStart, _id }</code>, and the trailing <code>_id</code> (a tie-breaker that keeps pages stable) isn't in any index.</li>
+              <li><strong>Effect:</strong> <code>date_1_slotStart_1</code> can't return rows already in that order. With no filter to narrow things down, MongoDB reads everything and sorts in memory.</li>
+            </ul>
+          </li>
+          <li><strong>The appointment list sorted by patient name, with no filter,</strong> has the same cause: the sort <code>{ patientNameLower, _id }</code> isn't fully covered by <code>patientNameLower_1</code>.</li>
+          <li><strong>The patient list without a search term</strong> has the same cause again: the sort <code>{ nameLower, _id }</code> isn't fully covered by <code>nameLower_1</code>.</li>
+          <li><strong>Doctor name search scans the doctors collection.</strong> This is expected and harmless: there are only a few dozen doctors, and "contains" matching can't use an index anyway. The appointments query that follows it uses <code>doctorId_1_date_1</code>.</li>
+        </ol>
+
+        <h3 id="recommended-fix">Recommended fix (not yet in the code)</h3>
+        <p class="measure">Make the sort indexes end with <code>_id</code>, so the index itself returns rows in the requested order. These were measured on the same dataset:</p>
+        <div class="table-wrap mid">
+          <table>
+            <caption class="sr-only">Measured effect of the recommended indexes</caption>
+            <thead><tr><th scope="col">Query</th><th scope="col">Today</th><th scope="col">With the recommended index</th></tr></thead>
+            <tbody>
+              <tr><td>Appointment list, default</td><td><span class="stage coll">COLLSCAN</span> 43,260 docs examined, 160 ms</td><td><code>{ date: 1, slotStart: 1, _id: 1 }</code>: <span class="stage ix">IXSCAN</span> <strong>20</strong> docs, 1 ms</td></tr>
+              <tr><td>Appointment list, sorted by patient name</td><td><span class="stage coll">COLLSCAN</span> 43,260 docs, 168 ms</td><td><code>{ patientNameLower: 1, _id: 1 }</code>: <span class="stage ix">IXSCAN</span> <strong>20</strong> docs, 1 ms</td></tr>
+              <tr><td>Patient list, no search term</td><td><span class="stage coll">COLLSCAN</span> 5,000 docs, 22 ms</td><td><code>{ nameLower: 1, _id: 1 }</code>: <span class="stage ix">IXSCAN</span> <strong>20</strong> docs, 0 ms</td></tr>
+              <tr><td>Appointment list, SCHEDULED in one week</td><td><span class="stage ix">IXSCAN</span> + in-memory sort, 1,513 docs</td><td>Planner switches to <code>{ date, slotStart, _id }</code>: <strong>40</strong> docs</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="list">
+          <li><strong>Replacing, not adding.</strong> Each recommended index starts with the fields of the index it would replace (<code>date_1_slotStart_1</code>, <code>patientNameLower_1</code>, <code>nameLower_1</code>), so it serves their queries too. The index count wouldn't grow.</li>
+          <li><strong>Unfiltered counts.</strong> The unfiltered list could also show <code>estimatedDocumentCount()</code>, which reads collection metadata instead of counting.</li>
+        </ul>
+
+        <h3 id="plan-findings">What the measured plans show</h3>
+        <ul class="list">
+          <li><strong>Every filtered query uses an index.</strong> The filters were designed for the indexes:
+            <ul>
+              <li>equality fields first: <code>doctorId</code>, <code>status</code>, <code>departmentId</code></li>
+              <li>then the date range</li>
+              <li>prefix searches as anchored regexes on lowercase copies</li>
+            </ul>
+          </li>
+          <li><strong>The slot grid is the cheapest query.</strong> It examined 11 documents for 11 results, using the double-booking index.</li>
+          <li><strong>Filtered lists still sort in memory</strong> (the SORT stage) after an index scan. That is fine while one filter matches a few thousand rows. At much larger volumes, compound indexes that end with the sort fields would remove the in-memory sort too.</li>
+          <li><strong>Every list uses <code>.lean()</code></strong> (plain objects, no Mongoose documents) and <code>Promise.all</code> to run the page query and the count together. The appointment list also leaves out <code>patientNameLower</code> and <code>__v</code> with a projection.</li>
+        </ul>
+      </section>
+
+      <!-- 09 Scaling -->
+      <section class="section" id="scaling" aria-labelledby="scaling-title">
+        <div class="section-head"><span class="section-num">09</span><h2 id="scaling-title">Scaling to millions of appointments</h2></div>
+        <p class="measure"><strong>Size today, measured.</strong> On the measured dataset, one appointment averages about <strong>440 bytes</strong> of BSON. Its 8 indexes (<code>_id</code> and the 7 in the index table) take about <strong>94 bytes per appointment</strong> together, from 10 bytes for <code>status_1_date_1</code> to 17 bytes for <code>uniq_active_doctor_slot</code> (WiredTiger compresses index keys). That is roughly:</p>
+        <div class="table-wrap mid">
+          <table>
+            <caption class="sr-only">Projected size by number of appointments</caption>
+            <thead><tr><th scope="col" class="num">Appointments</th><th scope="col" class="num">Documents (before compression)</th><th scope="col" class="num">Indexes</th></tr></thead>
+            <tbody>
+              <tr><td class="num">1 million</td><td class="num">~440 MB</td><td class="num">~94 MB</td></tr>
+              <tr><td class="num">10 million</td><td class="num">~4.4 GB</td><td class="num">~0.9 GB</td></tr>
+              <tr><td class="num">100 million</td><td class="num">~44 GB</td><td class="num">~9.4 GB</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="measure">Real data, with longer names and notes, will be larger. Indexes need to fit in memory (the WiredTiger cache) to stay fast, so index size is the first thing to watch.</p>
+
+        <h3 id="shard-keys">Sharding key options</h3>
+        <p class="measure">Sharding splits <code>appointments</code> across servers. On a sharded collection, every unique index must start with the shard key, which rules several options out:</p>
+        <div class="table-wrap mid">
+          <table>
+            <caption class="sr-only">Shard key options and trade-offs</caption>
+            <thead><tr><th scope="col">Shard key</th><th scope="col">Good</th><th scope="col">Bad</th></tr></thead>
+            <tbody>
+              <tr class="recommended"><td><code>{ doctorId: 1, date: 1 }</code> (ranged)<br><span class="badge accent">recommended</span></td><td>A doctor's day (slot grid, booking, the doctor's own list) goes to one shard. The double-booking index <code>{ doctorId, date, slotStart }</code> starts with the shard key, so it stays enforceable.</td><td>Admin lists across all doctors, by date or status, ask every shard. A very busy doctor's range can get hot.</td></tr>
+              <tr><td><code>{ doctorId: "hashed" }</code></td><td>Spreads writes evenly across shards</td><td>Loses range locality. Check carefully how the double-booking unique index can be kept under a hashed key before choosing it.</td></tr>
+              <tr><td><code>{ date: 1 }</code></td><td>Date-range lists touch few shards</td><td>Every new booking lands on the newest dates, which makes one hot shard. The unique index doesn't start with <code>date</code>, so double-booking protection would be lost.</td></tr>
+              <tr><td><code>{ departmentId: 1, date: 1 }</code></td><td>Department views stay local</td><td>Few departments means few, uneven chunks, and again the unique index doesn't start with the key</td></tr>
+              <tr><td><code>{ _id: "hashed" }</code></td><td>Perfectly even writes</td><td>Every list and slot query asks every shard, and the unique index can't be kept</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="callout"><strong>Recommendation:</strong> a ranged <code>{ doctorId: 1, date: 1 }</code>. It keeps the data-integrity guarantee and keeps the clinic's most frequent screens on one shard.</p>
+
+        <ul class="list">
+          <li><strong>Archive old appointments.</strong> A nightly job could move COMPLETED and CANCELLED appointments older than, say, 12 months to an <code>appointments_archive</code> collection or to Atlas Online Archive. The working set and its indexes stay small, while patient history can still read the archive.</li>
+          <li><strong>TTL on audit logs.</strong> Today there is deliberately no TTL, because medical audit trails usually must be kept for years. At scale:
+            <ul>
+              <li>Agree the retention period first.</li>
+              <li>Then either add a TTL index on <code>createdAt</code> with that period, or, better, export older entries to cheap storage before deleting them.</li>
+              <li>Audit logs could also move to their own cluster, so their write volume doesn't compete with bookings.</li>
+            </ul>
+          </li>
+          <li><strong>Read replicas.</strong> Lists, searches and reports can read from secondaries (<code>readPreference: secondaryPreferred</code>) and accept data a second or so old. Bookings and status changes always go to the primary. The slot grid is safest on the primary too, so a slot booked a moment ago doesn't look free. A booking stays safe either way, because the unique index lives on the primary.</li>
+          <li><strong>Index size.</strong>
+            <ul>
+              <li>Keep the number of indexes on <code>appointments</code> in check: each one costs write time and memory. The recommended fix in <a href="#recommended-fix">Query Plans</a> replaces indexes rather than adding them.</li>
+              <li>A partial index (like the double-booking one) indexes only the documents that need it.</li>
+              <li>Patient-name search could move to Atlas Search, so the name indexes stop growing with every appointment.</li>
+            </ul>
+          </li>
+          <li><strong>The counter document.</strong> Every new patient increments one counter document. At very high registration rates, hand out code ranges in blocks (hi/lo allocation) instead of one at a time.</li>
+        </ul>
+      </section>
+
+      <!-- 10 Glossary -->
+      <section class="section" id="glossary" aria-labelledby="glossary-title">
+        <div class="section-head"><span class="section-num">10</span><h2 id="glossary-title">Glossary</h2></div>
+        <dl class="glossary">
+          <div><dt>Collection</dt><dd>A group of documents, like a table in SQL. <code>appointments</code> is a collection.</dd></div>
+          <div><dt>Document</dt><dd>One record, stored as BSON (binary JSON). One appointment is one document.</dd></div>
+          <div><dt>ObjectId</dt><dd>MongoDB's default 12-byte id, written as 24 hex characters, for example <code>6ac8bba3c1d2e3f4a50b1e21</code>. Its first 4 bytes are the creation time in seconds (<code>6ac8bba3</code> is 9 October 2026, 10:02:11 UTC), so ids created later sort later.</dd></div>
+          <div><dt>Index</dt><dd>An extra, sorted structure that lets MongoDB find documents without reading the whole collection, like the index at the back of a book</dd></div>
+          <div><dt>Compound index</dt><dd>An index on several fields in a set order, such as <code>{ doctorId, date }</code>. It serves queries on the first field, or on the first and second, and so on: on a prefix of its fields.</dd></div>
+          <div><dt>Unique index</dt><dd>An index that refuses a second document with the same key values. The database itself enforces the rule.</dd></div>
+          <div><dt>Partial index</dt><dd>An index that only contains documents matching a filter, such as "status is not CANCELLED". Smaller, and with a partial unique index the rule applies only to those documents.</dd></div>
+          <div><dt>TTL index</dt><dd>"Time to live": an index on a date field that makes MongoDB delete each document once that date (plus an optional delay) has passed</dd></div>
+          <div><dt>Text index</dt><dd>An index for full-text word search. Not used here, because it can't match the start of a word.</dd></div>
+          <div><dt>IXSCAN / COLLSCAN</dt><dd>In a query plan: reading an index, versus reading every document in the collection</dd></div>
+          <div><dt>Denormalization</dt><dd>Storing a copy of data in a second place (for example the patient's name on each appointment) so reads don't need a join. The cost is keeping copies in sync.</dd></div>
+          <div><dt>Embedding vs referencing</dt><dd>Embedding puts related data inside the document, like the schedule inside the doctor. Referencing stores another document's <code>_id</code> and looks it up when needed, like <code>appointments.patientId</code>. Embed what is small, bounded and always read together; reference what grows or is shared.</dd></div>
+          <div><dt><code>$lookup</code></dt><dd>MongoDB's join: pulling matching documents from another collection into a query's results</dd></div>
+          <div><dt>Transaction</dt><dd>A group of writes that succeed together or not at all. Used here when a new patient is booked: the patient and the appointment are saved together, or neither is. Needs a replica set.</dd></div>
+          <div><dt>Replica set</dt><dd>Several MongoDB servers holding the same data. One primary takes writes, and secondaries copy it and can serve reads.</dd></div>
+          <div><dt>Shard key</dt><dd>The field or fields MongoDB uses to split a collection across servers (shards)</dd></div>
+          <div><dt>E11000</dt><dd>MongoDB's "duplicate key" error, raised when a write would break a unique index</dd></div>
+          <div><dt>Lean query</dt><dd>A Mongoose query that returns plain JavaScript objects instead of full Mongoose documents: faster, and enough for reading</dd></div>
+        </dl>
+      </section>
+
+      <footer class="foot">
+        <p>Written from the code on the <code>feat/backend</code> branch. The Markdown version is <code>docs/DATABASE_DESIGN.md</code>. Diagrams are drawn in the browser by Mermaid 11.4.1 from jsDelivr, so they need an internet connection.</p>
+      </footer>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js" integrity="sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I" crossorigin="anonymous"></script>
+<script>
+(function () {
+  'use strict';
+
+  var root = document.documentElement;
+  var darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  var THEME_KEY = 'emr-db-design-theme';
+
+  /* ---------- Theme: Auto (system), Light or Dark ---------- */
+
+  var themeButtons = Array.prototype.slice.call(document.querySelectorAll('[data-theme-choice]'));
+
+  function readThemeChoice() {
+    try {
+      var value = localStorage.getItem(THEME_KEY);
+      return value === 'light' || value === 'dark' ? value : 'system';
+    } catch (error) {
+      return 'system';
+    }
+  }
+
+  function saveThemeChoice(choice) {
+    try {
+      if (choice === 'system') {
+        localStorage.removeItem(THEME_KEY);
+      } else {
+        localStorage.setItem(THEME_KEY, choice);
+      }
+    } catch (error) {
+      // Storage unavailable: the choice lasts until the page is closed.
+    }
+  }
+
+  function applyThemeChoice(choice) {
+    if (choice === 'system') {
+      root.removeAttribute('data-theme');
+    } else {
+      root.setAttribute('data-theme', choice);
+    }
+    themeButtons.forEach(function (button) {
+      button.setAttribute('aria-pressed', String(button.dataset.themeChoice === choice));
+    });
+  }
+
+  var themeChoice = readThemeChoice();
+  applyThemeChoice(themeChoice);
+
+  themeButtons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      themeChoice = button.dataset.themeChoice;
+      saveThemeChoice(themeChoice);
+      applyThemeChoice(themeChoice);
+      renderDiagrams();
+    });
+  });
+
+  function onSchemeChange() {
+    if (themeChoice === 'system') {
+      renderDiagrams();
+    }
+  }
+  if (darkQuery.addEventListener) {
+    darkQuery.addEventListener('change', onSchemeChange);
+  } else if (darkQuery.addListener) {
+    darkQuery.addListener(onSchemeChange);
+  }
+
+  function isDark() {
+    var forced = root.getAttribute('data-theme');
+    return forced === 'dark' || (forced !== 'light' && darkQuery.matches);
+  }
+
+  /* ---------- Mermaid diagrams, themed from the page's colour tokens ---------- */
+
+  var figures = Array.prototype.slice.call(document.querySelectorAll('figure[data-diagram]'));
+  var userZoomed = [];
+  var renderPass = 0;
+  var DIAGRAM_FONT = '"Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif';
+
+  function token(name) {
+    return getComputedStyle(root).getPropertyValue(name).trim();
+  }
+
+  function themeVariables(dark) {
+    var node = token('--m-node');
+    var border = token('--m-node-border');
+    var alt = token('--m-alt');
+    var line = token('--m-line');
+    var text = token('--m-text');
+    var surface = token('--m-surface');
+    var surface2 = token('--m-surface-2');
+    var note = token('--m-note');
+    var noteBorder = token('--m-note-border');
+    return {
+      darkMode: dark,
+      fontFamily: DIAGRAM_FONT,
+      fontSize: '14px',
+      background: surface,
+      primaryColor: node,
+      primaryTextColor: text,
+      primaryBorderColor: border,
+      secondaryColor: alt,
+      secondaryTextColor: text,
+      secondaryBorderColor: line,
+      tertiaryColor: surface2,
+      tertiaryTextColor: text,
+      tertiaryBorderColor: line,
+      lineColor: line,
+      textColor: text,
+      mainBkg: node,
+      nodeBorder: border,
+      nodeTextColor: text,
+      clusterBkg: surface2,
+      clusterBorder: line,
+      titleColor: text,
+      edgeLabelBackground: surface,
+      actorBkg: node,
+      actorBorder: border,
+      actorTextColor: text,
+      actorLineColor: line,
+      signalColor: text,
+      signalTextColor: text,
+      labelBoxBkgColor: node,
+      labelBoxBorderColor: border,
+      labelTextColor: text,
+      loopTextColor: text,
+      noteBkgColor: note,
+      noteBorderColor: noteBorder,
+      noteTextColor: text,
+      activationBkgColor: alt,
+      activationBorderColor: border,
+      sequenceNumberColor: surface,
+      attributeBackgroundColorOdd: surface,
+      attributeBackgroundColorEven: surface2,
+      labelColor: text,
+      stateLabelColor: text,
+      stateBkg: node,
+      stateBorder: border,
+      transitionColor: line,
+      transitionLabelColor: text,
+      labelBackgroundColor: surface,
+      specialStateColor: text,
+      innerEndBackground: border,
+      altBackground: surface2,
+      compositeBackground: surface,
+      compositeTitleBackground: surface2
+    };
+  }
+
+  function statusMessage(text) {
+    var p = document.createElement('p');
+    p.className = 'figure-status';
+    p.textContent = text;
+    return p;
+  }
+
+  function sourceBlock(source) {
+    var pre = document.createElement('pre');
+    var code = document.createElement('code');
+    code.textContent = source;
+    pre.appendChild(code);
+    return pre;
+  }
+
+  function sourceOf(figure) {
+    return figure.querySelector('.diagram-source').textContent.trim();
+  }
+
+  function setZoom(figure, zoom) {
+    figure.setAttribute('data-zoom', zoom);
+    var button = figure.querySelector('.zoom-toggle');
+    button.setAttribute('aria-pressed', String(zoom === 'actual'));
+    button.textContent = zoom === 'actual' ? 'Fit to width' : 'Actual size';
+  }
+
+  // Shrink a diagram to the column unless that would make its text too small to read.
+  function fitDiagram(figure) {
+    var svg = figure.querySelector('.figure-canvas > svg');
+    var button = figure.querySelector('.zoom-toggle');
+    if (!svg) {
+      button.hidden = true;
+      return;
+    }
+    var canvas = figure.querySelector('.figure-canvas');
+    var style = getComputedStyle(canvas);
+    var available = canvas.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    var natural = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal.width : 0;
+    button.hidden = !natural || natural <= available;
+    if (userZoomed.indexOf(figure) === -1) {
+      setZoom(figure, natural && available / natural < 0.6 ? 'actual' : 'fit');
+      // The ER diagram's centre column (departments, doctors, appointments) is the best first view.
+      if (figure.getAttribute('data-zoom') === 'actual' && figure.hasAttribute('data-start-centre')) {
+        canvas.scrollLeft = (canvas.scrollWidth - canvas.clientWidth) / 2;
+      }
+    }
+  }
+
+  figures.forEach(function (figure) {
+    figure.querySelector('.zoom-toggle').addEventListener('click', function () {
+      if (userZoomed.indexOf(figure) === -1) {
+        userZoomed.push(figure);
+      }
+      setZoom(figure, figure.getAttribute('data-zoom') === 'actual' ? 'fit' : 'actual');
+    });
+  });
+
+  function showSources(reason) {
+    figures.forEach(function (figure) {
+      var canvas = figure.querySelector('.figure-canvas');
+      figure.setAttribute('data-state', 'error');
+      canvas.replaceChildren(statusMessage(reason), sourceBlock(sourceOf(figure)));
+    });
+    root.setAttribute('data-diagrams', 'unavailable');
+  }
+
+  async function renderDiagrams() {
+    var mermaid = window.mermaid;
+    if (!mermaid) {
+      showSources('Mermaid could not be loaded from cdn.jsdelivr.net, so the diagram is shown as its source text.');
+      return;
+    }
+    var pass = ++renderPass;
+    var dark = isDark();
+    root.setAttribute('data-diagrams', 'rendering');
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      darkMode: dark,
+      fontFamily: DIAGRAM_FONT,
+      themeVariables: themeVariables(dark),
+      er: { useMaxWidth: false },
+      sequence: { useMaxWidth: false, mirrorActors: false },
+      flowchart: { useMaxWidth: false, htmlLabels: true },
+      state: { useMaxWidth: false }
+    });
+
+    for (var i = 0; i < figures.length; i += 1) {
+      var figure = figures[i];
+      var canvas = figure.querySelector('.figure-canvas');
+      var source = sourceOf(figure);
+      var id = 'mmd-' + figure.getAttribute('data-diagram') + '-' + pass;
+      try {
+        var result = await mermaid.render(id, source);
+        if (pass !== renderPass) {
+          return;
+        }
+        canvas.innerHTML = result.svg;
+        figure.setAttribute('data-state', 'ok');
+        fitDiagram(figure);
+      } catch (error) {
+        if (pass !== renderPass) {
+          return;
+        }
+        var leftover = document.getElementById('d' + id);
+        if (leftover) {
+          leftover.remove();
+        }
+        figure.setAttribute('data-state', 'error');
+        canvas.replaceChildren(
+          statusMessage('This diagram could not be drawn: ' + (error && error.message ? error.message : String(error))),
+          sourceBlock(source)
+        );
+      }
+    }
+    if (pass === renderPass) {
+      root.setAttribute('data-diagrams', 'ready');
+    }
+  }
+
+  var resizeTimer = 0;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      figures.forEach(function (figure) {
+        if (figure.getAttribute('data-state') === 'ok') {
+          fitDiagram(figure);
+        }
+      });
+    }, 150);
+  });
+
+  // Wait for the web fonts, so Mermaid sizes its boxes for the text it will actually show.
+  var fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+  fontsReady.then(renderDiagrams, renderDiagrams);
+
+  /* ---------- Sample documents: light syntax colouring ---------- */
+
+  function escapeHtml(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  var TOKEN_PATTERN = /'(?:[^'\\\n]|\\.)*'|\b(?:ObjectId|ISODate)\b|\b(?:true|false|null)\b|\b\d+(?:\.\d+)?\b|[A-Za-z_$][\w$]*(?=\s*:)/g;
+
+  document.querySelectorAll('code.sample').forEach(function (code) {
+    var text = code.textContent;
+    var html = '';
+    var last = 0;
+    var match;
+    TOKEN_PATTERN.lastIndex = 0;
+    while ((match = TOKEN_PATTERN.exec(text)) !== null) {
+      var value = match[0];
+      var kind = value.charAt(0) === "'" ? 'str'
+        : /^(?:ObjectId|ISODate)$/.test(value) ? 'fn'
+        : /^(?:true|false|null)$/.test(value) ? 'lit'
+        : /^\d/.test(value) ? 'num'
+        : 'key';
+      html += escapeHtml(text.slice(last, match.index)) + '<span class="tok-' + kind + '">' + escapeHtml(value) + '</span>';
+      last = match.index + value.length;
+    }
+    code.innerHTML = html + escapeHtml(text.slice(last));
+  });
+
+  /* ---------- Collection cards ---------- */
+
+  var cards = Array.prototype.slice.call(document.querySelectorAll('details.card'));
+  var toggleCards = document.getElementById('toggle-cards');
+
+  function updateToggleLabel() {
+    var allOpen = cards.every(function (card) { return card.open; });
+    toggleCards.textContent = allOpen ? 'Collapse all' : 'Expand all';
+  }
+
+  toggleCards.addEventListener('click', function () {
+    var open = !cards.every(function (card) { return card.open; });
+    cards.forEach(function (card) { card.open = open; });
+    updateToggleLabel();
+  });
+  cards.forEach(function (card) { card.addEventListener('toggle', updateToggleLabel); });
+
+  function openCardFromHash() {
+    var id = decodeURIComponent(window.location.hash.slice(1));
+    if (id.indexOf('col-') !== 0) {
+      return;
+    }
+    var card = document.getElementById(id);
+    if (card && card.tagName === 'DETAILS') {
+      card.open = true;
+    }
+  }
+  window.addEventListener('hashchange', openCardFromHash);
+  openCardFromHash();
+  updateToggleLabel();
+
+  /* ---------- Index table filter ---------- */
+
+  var indexRows = Array.prototype.slice.call(document.querySelectorAll('#index-table tbody tr[data-collection]'));
+  var indexSearch = document.getElementById('index-search');
+  var indexCount = document.getElementById('index-count');
+  var indexEmpty = document.getElementById('index-empty');
+  var indexFilter = { text: '', collection: 'all', type: 'all' };
+
+  function applyIndexFilter() {
+    var shown = 0;
+    indexRows.forEach(function (row) {
+      var matchesCollection = indexFilter.collection === 'all' || row.getAttribute('data-collection') === indexFilter.collection;
+      var matchesType = indexFilter.type === 'all' || row.getAttribute('data-types').split(' ').indexOf(indexFilter.type) !== -1;
+      var matchesText = !indexFilter.text || row.textContent.toLowerCase().indexOf(indexFilter.text) !== -1;
+      row.hidden = !(matchesCollection && matchesType && matchesText);
+      if (!row.hidden) {
+        shown += 1;
+      }
+    });
+    indexCount.textContent = shown + ' of ' + indexRows.length + ' indexes';
+    indexEmpty.hidden = shown !== 0;
+  }
+
+  indexSearch.addEventListener('input', function () {
+    indexFilter.text = indexSearch.value.trim().toLowerCase();
+    applyIndexFilter();
+  });
+
+  function wireChips(attribute, key) {
+    var chips = Array.prototype.slice.call(document.querySelectorAll('[' + attribute + ']'));
+    chips.forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        indexFilter[key] = chip.getAttribute(attribute);
+        chips.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === chip));
+        });
+        applyIndexFilter();
+      });
+    });
+  }
+  wireChips('data-filter-collection', 'collection');
+  wireChips('data-filter-type', 'type');
+  applyIndexFilter();
+
+  /* ---------- Query plans: docs-examined meters (log scale) ---------- */
+
+  var MOST_EXAMINED = 43260;
+  document.querySelectorAll('#plan-table tr[data-examined]').forEach(function (row) {
+    var examined = Number(row.getAttribute('data-examined'));
+    var share = Math.log10(examined + 1) / Math.log10(MOST_EXAMINED + 1);
+    var meter = document.createElement('span');
+    meter.className = 'meter';
+    meter.setAttribute('aria-hidden', 'true');
+    var fill = document.createElement('span');
+    fill.style.width = Math.max(3, Math.round(share * 100)) + '%';
+    meter.appendChild(fill);
+    row.querySelector('.examined').appendChild(meter);
+  });
+
+  /* ---------- Slot example: the same steps as generateSlots ---------- */
+
+  var DAY = {
+    sessions: [['09:00', '12:00'], ['13:00', '17:00']],
+    breaks: [['12:00', '13:00']]
+  };
+  var DAY_START = 9 * 60;
+  var DAY_END = 17 * 60;
+  var slotTrack = document.getElementById('slot-track');
+  var slotTicks = document.getElementById('slot-ticks');
+  var slotSummary = document.getElementById('slot-summary');
+  var lengthButtons = Array.prototype.slice.call(document.querySelectorAll('#slot-demo [data-minutes]'));
+
+  function toMinutes(time) {
+    return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+  }
+
+  function toTime(minutes) {
+    var hours = Math.floor(minutes / 60);
+    var rest = minutes % 60;
+    return (hours < 10 ? '0' : '') + hours + ':' + (rest < 10 ? '0' : '') + rest;
+  }
+
+  // Sessions minus breaks: what is left can hold slots.
+  function freeRanges() {
+    var ranges = DAY.sessions.map(function (pair) {
+      return { start: toMinutes(pair[0]), end: toMinutes(pair[1]) };
+    });
+    DAY.breaks.forEach(function (pair) {
+      var pause = { start: toMinutes(pair[0]), end: toMinutes(pair[1]) };
+      ranges = ranges.reduce(function (kept, range) {
+        if (pause.end <= range.start || pause.start >= range.end) {
+          return kept.concat([range]);
+        }
+        if (pause.start > range.start) {
+          kept.push({ start: range.start, end: pause.start });
+        }
+        if (pause.end < range.end) {
+          kept.push({ start: pause.end, end: range.end });
+        }
+        return kept;
+      }, []);
+    });
+    return ranges.sort(function (a, b) { return a.start - b.start; });
+  }
+
+  function place(element, start, end) {
+    var span = DAY_END - DAY_START;
+    element.style.left = ((start - DAY_START) / span) * 100 + '%';
+    element.style.width = ((end - start) / span) * 100 + '%';
+    return element;
+  }
+
+  function block(className, start, end, title) {
+    var element = document.createElement('span');
+    element.className = className;
+    element.title = title;
+    return place(element, start, end);
+  }
+
+  function drawSlots(length) {
+    slotTrack.replaceChildren();
+    var parts = [];
+    var dropped = [];
+    var count = 0;
+
+    DAY.breaks.forEach(function (pair) {
+      var lunch = block('brk', toMinutes(pair[0]), toMinutes(pair[1]), 'Break ' + pair[0] + '–' + pair[1]);
+      lunch.textContent = 'Break';
+      slotTrack.appendChild(lunch);
+    });
+
+    freeRanges().forEach(function (range, index) {
+      var starts = [];
+      for (var start = range.start; start + length <= range.end; start += length) {
+        starts.push(start);
+        slotTrack.appendChild(block('slot' + (count % 2 ? ' alt' : ''), start, start + length, toTime(start) + '–' + toTime(start + length)));
+        count += 1;
+      }
+      var remainderStart = range.start + starts.length * length;
+      if (remainderStart < range.end) {
+        slotTrack.appendChild(block('rem', remainderStart, range.end, 'Dropped: ' + toTime(remainderStart) + '–' + toTime(range.end)));
+        dropped.push(toTime(remainderStart) + '–' + toTime(range.end));
+      }
+      var label = index === 0 ? 'morning' : 'afternoon';
+      parts.push(starts.length + ' ' + label + ' slots' + (starts.length
+        ? ' (' + toTime(starts[0]) + ' to ' + toTime(starts[starts.length - 1]) + ')'
+        : ''));
+    });
+
+    var text = 'With ' + length + '-minute slots this gives ' + parts.join(' and ') + '. That is ' + count + ' slots, none during lunch.';
+    if (dropped.length) {
+      text += ' ' + dropped.join(' and ') + (dropped.length === 1 ? ' is' : ' are') + ' too short for a slot and dropped.';
+    }
+    slotSummary.textContent = text;
+  }
+
+  for (var hour = 9; hour <= 17; hour += 1) {
+    var tick = document.createElement('span');
+    tick.className = 'tick';
+    tick.textContent = (hour < 10 ? '0' : '') + hour + ':00';
+    place(tick, hour * 60, hour * 60);
+    tick.style.width = '';
+    slotTicks.appendChild(tick);
+  }
+
+  lengthButtons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      lengthButtons.forEach(function (other) {
+        other.setAttribute('aria-pressed', String(other === button));
+      });
+      drawSlots(Number(button.getAttribute('data-minutes')));
+    });
+  });
+  drawSlots(15);
+
+  /* ---------- Section rail: highlight the section in view ---------- */
+
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+  var toc = document.querySelector('.toc');
+  var sections = navLinks.map(function (link) {
+    return document.getElementById(link.getAttribute('href').slice(1));
+  });
+  var activeIndex = -1;
+  var scrollQueued = false;
+
+  function updateActiveSection() {
+    scrollQueued = false;
+    var line = window.innerHeight * 0.3;
+    var current = 0;
+    sections.forEach(function (section, index) {
+      if (section && section.getBoundingClientRect().top <= line) {
+        current = index;
+      }
+    });
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
+      current = sections.length - 1;
+    }
+    if (current === activeIndex) {
+      return;
+    }
+    activeIndex = current;
+    navLinks.forEach(function (link, index) {
+      if (index === current) {
+        link.setAttribute('aria-current', 'true');
+      } else {
+        link.removeAttribute('aria-current');
+      }
+    });
+    // On narrow screens the rail is a horizontal strip: keep the active tab in view.
+    if (toc.scrollWidth > toc.clientWidth) {
+      var link = navLinks[current];
+      toc.scrollTo({ left: link.offsetLeft - (toc.clientWidth - link.offsetWidth) / 2, behavior: 'smooth' });
+    }
+  }
+
+  window.addEventListener('scroll', function () {
+    if (!scrollQueued) {
+      scrollQueued = true;
+      window.requestAnimationFrame(updateActiveSection);
+    }
+  }, { passive: true });
+  updateActiveSection();
+})();
+</script>
+</body>
+</html>

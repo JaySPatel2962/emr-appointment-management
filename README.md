@@ -180,6 +180,16 @@ socket.on('appointment:cancelled', (appointment) => {});
 
 ## Database design
 
+The full design is in [`docs/DATABASE_DESIGN.md`](docs/DATABASE_DESIGN.md). It covers:
+- every collection's fields, with a sample document
+- the ER diagram
+- each index and the query it serves
+- the booking, status and auth flows
+- measured query plans
+- how the design would scale
+
+A visual version with the same content is in `docs/` as [`docs/database-design.html`](docs/database-design.html). Open it in a browser. Its diagrams load Mermaid from a CDN, so they need an internet connection.
+
 MongoDB with Mongoose. How the collections relate:
 
 ```mermaid
@@ -191,7 +201,7 @@ erDiagram
     DEPARTMENTS ||--o{ APPOINTMENTS : "groups"
     USERS ||--o{ APPOINTMENTS : "creates"
     USERS ||--o{ REFRESH_TOKENS : "signs in with"
-    USERS ||--o{ AUDIT_LOGS : "performs"
+    USERS |o--o{ AUDIT_LOGS : "performs"
 ```
 
 | Collection | What it stores |
@@ -230,7 +240,7 @@ A sample appointment:
 }
 ```
 
-Double booking is prevented by a unique index on `{ doctorId, date, slotStart }` that covers only active appointments, so a cancelled slot can be booked again. Every index, and the reason for it, is listed in [`docs/decisions-notes.md`](docs/decisions-notes.md).
+Double booking is prevented by a unique index on `{ doctorId, date, slotStart }` that covers only active appointments, so a cancelled slot can be booked again. Every index, the query it serves and the reason for it are listed in [`docs/DATABASE_DESIGN.md`](docs/DATABASE_DESIGN.md#5-indexes).
 
 ## Testing
 
