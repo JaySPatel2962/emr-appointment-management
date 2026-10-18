@@ -45,6 +45,21 @@ describe('error responses', () => {
     expect(bodyOf(res).message).toBe('Malformed JSON in request body');
   });
 
+  it('rejects a deeply nested body with 400, not a 500', async () => {
+    const depth = 20_000;
+    const res = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Content-Type', 'application/json')
+      .send(`${'['.repeat(depth)}${']'.repeat(depth)}`);
+
+    expect(res.status).toBe(400);
+    expect(bodyOf(res)).toMatchObject({
+      success: false,
+      message: 'Request body is nested too deeply',
+      data: null,
+    });
+  });
+
   it('rejects a body over the size limit with 413', async () => {
     const res = await request(app)
       .post('/api/v1/health')

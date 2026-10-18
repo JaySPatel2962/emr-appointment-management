@@ -36,6 +36,7 @@ Running notes, phase by phase, for writing `ENGINEERING_DECISIONS.md`. Each entr
   - The "simple" query parser never builds nested objects.
   - zod validates every input.
   - `sanitizeInput` strips `$`-prefixed, dotted, `__proto__`, `constructor` and `prototype` keys from JSON bodies at any depth.
+  - It refuses bodies nested more than 32 levels deep with a 400. Found in manual QA: a 40 KB body of 20,000 nested arrays overflowed the call stack of the recursive cleaner and gave a 500, before any authentication. The deepest real body, a weekly schedule, is about five levels deep.
 - **Security middleware:**
   - helmet.
   - CORS only for `CLIENT_URL`, with credentials. The origin is given as a list, so any other origin gets no `Access-Control-Allow-Origin` header at all.

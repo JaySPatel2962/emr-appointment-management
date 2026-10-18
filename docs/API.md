@@ -168,7 +168,7 @@ These apply to every endpoint:
 - **Dates** are `"YYYY-MM-DD"` and must be real calendar dates (`2026-02-30` is rejected). **Times** are `"HH:mm"` on a 24-hour clock. Both are wall-clock values in the clinic's timezone (`CLINIC_TIMEZONE`, default `Asia/Kolkata`).
 - **Timestamps** in responses (`createdAt`, `arrivedAt` and so on) are ISO 8601 in UTC.
 - **Text** fields are trimmed before their length is checked, except passwords.
-- **Unknown body fields** are ignored. Body keys that start with `$` or contain `.` are removed before validation, so MongoDB operators can't be injected.
+- **Unknown body fields** are ignored. Body keys that start with `$` or contain `.` are removed before validation, so MongoDB operators can't be injected. A body nested more than 32 levels deep gets `400 Request body is nested too deeply`.
 - **Query strings** are flat: `?a[b]=1` is not turned into an object.
 
 ### Order of checks
@@ -2822,7 +2822,7 @@ interface ClientToServerEvents {
 
 | Status | Meaning | `message` values |
 | --- | --- | --- |
-| 400 | The request is malformed or breaks a validation rule | `Validation failed` (each problem in `meta.errors`), `Malformed JSON in request body`, `Invalid value for <field>` |
+| 400 | The request is malformed or breaks a validation rule | `Validation failed` (each problem in `meta.errors`), `Malformed JSON in request body`, `Request body is nested too deeply` (more than 32 levels), `Invalid value for <field>` |
 | 401 | Not authenticated | `Authentication required`, `Invalid token`, `Token has expired`, `Invalid email or password`, `Refresh token missing`, `Your session has expired, please log in again` |
 | 403 | Authenticated, but the role or doctor scope doesn't allow it | `You do not have permission to perform this action`, `Doctors can only update consultation notes`, `Doctors can only view their own slots` |
 | 404 | Not found, or outside a doctor's scope | `Doctor not found`, `Doctor not found in this department`, `Patient not found`, `Appointment not found`, `Route not found: <METHOD> <path>` |
