@@ -15,7 +15,7 @@ Running notes, phase by phase, for writing `ENGINEERING_DECISIONS.md`. Each entr
 
 ## Phase 1: Foundation
 
-- **Fail-fast configuration.** `config/env.ts` validates every environment variable with zod at startup. If any is invalid, the server stops and lists the variable names, never their values. Only `MONGO_URI` is required; everything else has a safe default. Tests never load `.env` (they take their values from `vitest.config.ts`), so a developer's Atlas credentials can't leak into a test run. The JWT variables arrive with auth in Phase 3, so the app can start before auth exists. That is a small deviation from the original plan.
+- **Fail-fast configuration.** `config/env.ts` validates every environment variable with zod at startup. If any is invalid, the server stops and lists the variable names, never their values. `MONGO_URI` and the two JWT secrets are required; everything else has a safe default. The JWT variables were added with auth in Phase 3 rather than here, so the app could start before auth existed. Tests never load `.env` (they take their values from `vitest.config.ts`), so a developer's Atlas credentials can't leak into a test run.
 - **One response envelope** `{ success, message, data, meta }`, built in one place (`utils/api-response.ts`) for both successes and errors.
 - **Central error mapping** in `utils/http-error.ts`, a pure function with its own unit tests:
 
@@ -46,7 +46,17 @@ Running notes, phase by phase, for writing `ENGINEERING_DECISIONS.md`. Each entr
 - **Request ids.** Every request gets an `X-Request-Id`. A safe incoming id is reused; otherwise a UUID is generated. It is returned in the response header, in error bodies (`meta.requestId`) and in every log line, so an error a user reports can be traced.
 - **Health check.** `GET /api/v1/health` returns 200 when MongoDB is connected and 503 otherwise, so a load balancer can take an unhealthy instance out of rotation.
 - **`app.ts` and `server.ts` are separate.** `createApp()` builds the Express app with no side effects, so tests run it in-process with supertest. `server.ts` owns the process: it connects to MongoDB, listens, and shuts down gracefully on SIGINT or SIGTERM. Shutdown stops accepting connections, closes idle keep-alive connections, lets in-flight requests finish, closes MongoDB, and forces an exit after 10 seconds. Unhandled rejections and uncaught exceptions are logged and end the process, so a process manager restarts it cleanly.
+- **The database connection.** MongoDB Atlas, reached through `MONGO_URI` in `server/.env`, which is gitignored.
+  - The URI is never hardcoded, printed or logged, and no real value goes into a committed file. `.env.example` holds only a placeholder: `mongodb+srv://<user>:<password>@<cluster-host>/emr_appointments?retryWrites=true&w=majority`.
+  - `config/db.ts` connects with a server-selection timeout (10 seconds by default), so a wrong URI or a blocked IP fails fast. The error message says what to check and never includes the URI. The driver's reason, which names the host but never the credentials, travels as the error's cause.
+  - Shutdown closes the connection gracefully.
+  - Tests use an in-memory replica set and never touch Atlas (see Phase 0).
 - **Indexes.** `autoIndex` is on, so the partial unique index is created at startup. After connecting, the server waits for every model's index build and logs any failure with the model's name.
+- **Status codes follow one set of rules.**
+  - 404 when the resource in the URL doesn't exist, or the caller isn't allowed to know that it exists.
+  - 422 when a well-formed request breaks a business rule: a slot the doctor doesn't offer, a past slot or date, an unknown department in the body.
+  - 409 for a conflict with the current state: a taken slot, a status change the workflow doesn't allow, an email that is already used.
+  - 400 only for input that fails validation.
 
 ## Phase 2: Models and indexes
 
@@ -106,6 +116,7 @@ Every index exists because a query needs it, since each extra index slows writes
   - Every refresh revokes the old token and issues a new one.
   - If a revoked token is presented again, it must have been copied. Every session of that user is revoked and the event is audited as `REFRESH_TOKEN_REUSE`.
   - The old token is claimed with an atomic conditional update, so two simultaneous refreshes with the same token can't both succeed.
+- **A failed refresh clears the cookie.** A refresh token that failed once will never work again, so the browser can drop it.
 - **A failed login gives nothing away.**
   - An unknown email, a wrong password and a disabled account all get the same 401, "Invalid email or password". The audit log records the real reason.
   - An unknown email still runs a bcrypt comparison against a dummy hash, so response time doesn't reveal which emails exist.
@@ -134,6 +145,7 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Past rules.** A date before the clinic's today is rejected with 422. On today, a slot whose start time has been reached is PAST, because a slot that has already started can't be booked.
 - **BOOKED wins over PAST.** A booked slot keeps its appointment id even after it starts, so a receptionist can still mark a late arrival.
 - **Booking reuses the generator** (`resolveBookableSlot`), so the API can never book a time that the slot grid wouldn't offer: not in a break, not on a day off, not off the grid, not in the past.
+- **A doctor asking for another doctor's slots gets 403, not 404.** A slot grid holds no private record, and a clear answer lets the frontend explain why. Records such as profiles and appointments answer 404 instead, so their ids aren't confirmed.
 - **Known limitation:** if a schedule changes after appointments were booked, an appointment outside the new schedule no longer appears in the slot grid. It is still in the appointment list.
 
 ## Phase 6: Appointments and patients
@@ -153,6 +165,12 @@ Every index exists because a query needs it, since each extra index slows writes
   - Nothing changes once it is CANCELLED.
   - Doctors can only change notes, and get a 403 otherwise.
   - Cancelling is soft: DELETE keeps the record and frees the slot.
+- **Workflow choices.**
+  - An appointment can be completed only after the patient has arrived. A no-show is cancelled, not completed.
+  - Arrival can be marked on any date, not only on the appointment day. A stricter clinic could require the dates to match.
+- **Who sees patients.** Patient search is for Super Admins and receptionists. Doctors see a patient's details through their own appointments (`GET /appointments/:id`). Without a search term, the patient list shows everyone, sorted by name.
+- **New patients.** The mobile number is normalized before saving, and a date of birth can't be in the future.
+- **Notes are in the appointment list and detail,** which only signed-in staff can read, but never in Socket.IO events.
 - **Doctor scoping is forced in the service**, in every query (list, detail, update, status change), not left to the controllers. A doctor's `doctorId` and `doctorName` filters are ignored, and another doctor's appointment gets a 404.
 - **Filters are joined with `$and`**, one condition each, so no filter can overwrite another's field. The Phase 4 bug came from spreading two `_id` conditions into one object.
 - **List performance.**
@@ -201,3 +219,64 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Coverage:** about 92% of statements and lines, and 86% of branches (`npm run test:coverage`). Only the process entry point and one-off scripts are excluded.
 - **Every commit passes the same gates:** Prettier, `tsc --noEmit`, ESLint `strictTypeChecked`, the whole test suite, and a production build.
 - **What the tests caught:** the `_id` override in `getDoctor` (Phase 4), the index-build race in the test setup (Phase 6), and a test factory that pointed appointments at patients that didn't exist (Phase 8).
+
+## Libraries and why
+
+| Library | Why |
+| --- | --- |
+| Express 5 | The required framework. Version 5 also forwards rejected promises to the error handler. |
+| Mongoose 9 | The required ODM: schemas, validation, index definitions and transactions |
+| zod 4 | One schema per request gives both the validation and the TypeScript type |
+| jsonwebtoken | Signs and verifies both tokens, with the algorithm pinned |
+| bcrypt 6 | Password hashing with a tunable cost. Native and fast, with prebuilt binaries for Windows. |
+| helmet, cors | Safe default headers, and CORS limited to the frontend's origin |
+| express-rate-limit | Per-IP limits for the whole API and for failed logins |
+| cookie-parser | Reads the httpOnly refresh cookie |
+| pino, pino-http | Fast structured logs with built-in redaction |
+| dotenv | Loads `server/.env` outside tests |
+| luxon | Clinic-timezone dates and times without hand-written offset maths |
+| Socket.IO 4 | Rooms, acknowledgements and reconnection out of the box for live updates |
+| TypeScript 6, tsx | Strict types, fast development runs, and plain `tsc` for the build |
+| ESLint, typescript-eslint, Prettier | Strict type-aware linting and consistent formatting |
+| Vitest, supertest, mongodb-memory-server | Fast tests through the real HTTP API against a real, in-memory MongoDB replica set |
+| socket.io-client | Real socket round trips in the tests |
+
+## Confirmed product decisions
+
+- Breaks can sit in the gap between two sessions, as long as they fall within the day's working hours (Phase 2).
+- Mobile numbers are Indian 10-digit numbers, normalized before saving (Phase 2).
+- The backend is TypeScript only, in strict mode, with MongoDB Atlas as the database.
+
+## Judgment calls to confirm
+
+Made without a specific instruction. Each is a small change if the clinic wants it different.
+
+- Arrival can be marked on any date, not only on the appointment day (Phase 6).
+- Consultation notes stay editable after a visit is completed; the purpose doesn't (Phase 6).
+- Another doctor's records answer 404; another doctor's slot grid answers 403 (Phases 4 to 6).
+- Audit writes are best effort and never fail the user's action (Phase 3).
+- Socket.IO events never include clinical notes (Phase 7).
+- Doctor search is a "contains" match on name and specialization; patient search is a prefix match (Phases 4 and 6).
+
+## Known limitations and next steps
+
+- Appointments booked before a schedule change stay valid even if they no longer fit. They should be flagged for review.
+- The patient and doctor names copied onto appointments are not re-synced. No flows edit them yet.
+- A deactivated user keeps API access until their access token expires, within 15 minutes.
+- Audit writes are best effort. An outbox, or writing in the same transaction, would guarantee them.
+- The server runs as one instance. Add the Socket.IO Redis adapter before running several.
+- A slot inside a daylight-saving jump isn't handled specially. Asia/Kolkata has none.
+- Not built yet: a dashboard summary endpoint, an audit log viewer, patient editing, OpenAPI documentation and Docker.
+- Node 20 is end-of-life. Moving to Node 22 or 24 LTS also allows Vitest 5 and TypeScript 7.
+- At much larger scale:
+  - Archive past appointments by date.
+  - Cache slot grids for a few seconds.
+  - Move patient name search to Atlas Search.
+  - Consider sharding appointments by doctor.
+
+## Workflow
+
+- One phase per commit on `feat/backend`, using conventional commits.
+- Messages follow the 50/72 format and carry only the author's name, with no AI co-author lines. The git email is set for this repository only.
+- Every commit passes the same gates: Prettier, type-check, lint, the whole test suite and a production build.
+- `.env` is never committed.
