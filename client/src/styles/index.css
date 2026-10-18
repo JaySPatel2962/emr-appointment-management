@@ -1,1 +1,102 @@
 @import 'tailwindcss';
+
+/*
+ * Design tokens. The look is a clinic day sheet: ballpoint-ink text on cool paper, with
+ * carbon-copy blue for what is booked and for primary actions. Status colors carry meaning
+ * everywhere, always next to a text label:
+ *   leaf      available slots, completed visits
+ *   carbon    booked slots, scheduled visits, primary actions
+ *   saffron   patients who have arrived and are waiting
+ *   vermilion cancelled visits, destructive actions, errors
+ *   slate     slots in the past (hatched)
+ * Only these colors exist: Tailwind's default palette is switched off, so a stray `bg-blue-500`
+ * produces no CSS. Every text pairing is at least 4.5:1 (WCAG AA).
+ */
+@theme {
+  --font-sans:
+    'Atkinson Hyperlegible Next Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+
+  --color-*: initial;
+  --color-white: #ffffff;
+
+  --color-ink: #172238;
+  --color-ink-muted: #4a5466;
+  --color-ink-subtle: #5f6b7e;
+
+  --color-canvas: #edf1f4;
+  --color-paper: #ffffff;
+  --color-line: #d5dce3;
+  --color-line-strong: #818d9b;
+
+  --color-carbon: #2b3990;
+  --color-carbon-strong: #222e78;
+  --color-carbon-soft: #e8ebf8;
+
+  --color-leaf: #17704a;
+  --color-leaf-soft: #e2f3ea;
+
+  --color-saffron: #9a4a06;
+  --color-saffron-soft: #fbecd9;
+
+  --color-vermilion: #b0261e;
+  --color-vermilion-strong: #8f1d17;
+  --color-vermilion-soft: #fbe7e5;
+
+  --color-slate: #5a6475;
+  --color-slate-soft: #eef1f4;
+
+  --shadow-overlay: 0 16px 40px -12px rgb(23 34 56 / 0.28), 0 2px 8px rgb(23 34 56 / 0.08);
+
+  --animate-enter: enter 160ms ease-out;
+
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+}
+
+/* Slots whose time has passed: diagonal hatching, so "past" never relies on color alone. */
+@utility bg-hatch {
+  background-color: var(--color-paper);
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--color-slate-soft) 0 6px,
+    transparent 6px 12px
+  );
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* A modal dialog keeps the page behind it from scrolling. */
+  html:has(dialog[open]:modal) {
+    overflow: hidden;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+  }
+
+  /* One visible focus ring for every interactive element, keyboard users first. */
+  :focus-visible {
+    outline: 2px solid var(--color-carbon);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

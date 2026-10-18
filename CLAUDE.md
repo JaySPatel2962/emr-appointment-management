@@ -65,7 +65,7 @@ Enterprise EMR appointment management module (MERN). Code quality and architectu
   - No inline styles.
 - Every page has loading, empty and error states, and works at 375px, 768px and 1280px wide.
 - Use `React.memo`, `useCallback` and `useMemo` only where they measurably help, such as slot grid cells and table rows. Record each one in `docs/decisions-notes.md`.
-- Dates and times are the API's clinic-timezone strings (`"YYYY-MM-DD"`, `"HH:mm"`). Never turn them into a `Date` to display them.
+- Dates and times are the API's clinic-timezone strings (`"YYYY-MM-DD"`, `"HH:mm"`). Never parse them with `new Date()` in the browser's timezone. Use the helpers in `src/utils/date.ts`, which work on UTC midnight, and `useClinicClock()` for "today" and "now" on the clinic's clock.
 
 ## Domain rules
 - Roles: `SUPER_ADMIN`, `RECEPTIONIST`, `DOCTOR`; doctors see only their own appointments
@@ -186,9 +186,17 @@ Status codes:
 
 ## Frontend status
 The frontend is built on `feat/frontend` (branched from `feat/backend`), one phase per commit.
-- Done: 0 tooling (Vite, React, strict TypeScript, Tailwind, ESLint, Prettier, Vitest, env validated at startup)
+- Done:
+  - 0 tooling: Vite, React, strict TypeScript, Tailwind, ESLint, Prettier, Vitest, and env validated at startup
+  - 1 foundation:
+    - design tokens
+    - the typed API layer and `ApiError`
+    - the axios refresh queue, with a cross-tab lock
+    - the in-memory session, `AuthContext`, and silent refresh
+    - route guards and lazy routes
+    - the responsive shell
+    - the error boundary, toasts, and the login, 403 and 404 pages
 - Next:
-  - 1 foundation: typed API layer, axios refresh queue, auth, routing, layout, error handling
   - 2 reusable components
   - 3 pages
   - 4 performance and quality
@@ -198,7 +206,15 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
 ### Client env vars (`client/.env.local`; see `client/.env.example`)
 - `VITE_API_URL` (http://localhost:5000/api/v1): the REST API, including `/api/v1`. A path such as `/api/v1` also works behind a same-origin reverse proxy.
 - `VITE_SOCKET_URL` (the origin of `VITE_API_URL`): the Socket.IO server
-- Both are validated at startup, and both are public, because they're compiled into the bundle
+- `VITE_CLINIC_TIMEZONE` (Asia/Kolkata): must match the server's `CLINIC_TIMEZONE`. It decides "today" and which slots are past.
+- All are validated at startup, and all are public, because they're compiled into the bundle
+
+### Client architecture
+- `services/http.ts` has two axios clients. `authHttp`, for `/auth/*`, never sends or refreshes a token. `http`, for everything else, adds the bearer token and refreshes it on a 401. Concurrent 401s share one refresh, and the Web Locks API serializes refreshes across tabs.
+- `services/auth-session.ts` holds the token and the user in memory, as an external store. `AuthProvider` exposes it and restores the session on load. Logout is broadcast to the other tabs.
+- `services/socket.ts` holds one shared, reference-counted socket. Its `auth` callback supplies a fresh token on every connection attempt.
+- Toasts are an external store too: call `toast.success(...)` from anywhere.
+- Routes live in `app/router.tsx`, and the role lists are `ROUTE_ACCESS` in `constants/routes.ts`. The nav, in `app/navigation.ts`, uses the same lists.
 
 ## NOTE
 - Never use niro for anything

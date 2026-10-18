@@ -257,6 +257,77 @@ Every index exists because a query needs it, since each extra index slows writes
   - The cost is a CORS preflight before each request that carries the `Authorization` header. In production, a reverse proxy that serves both under one origin (`VITE_API_URL=/api/v1`) removes it.
 - **`dev` and `preview` both use port 5173**, with `strictPort`, because CORS allows exactly one origin.
 
+## Frontend Phase 1: Foundation
+
+### Design direction
+
+- **Subject.** The front desk and consulting rooms of a multi-department clinic in India. Receptionists book, check in and answer the phone all day; doctors glance at their own day; a Super Admin sets things up. The app's main job is to show a doctor's day as time, and to turn an open slot into a booked visit in seconds without double booking.
+- **The look is a clinic day sheet**: ballpoint-ink navy text on cool paper, and the blue of a carbon-copy appointment slip for what is booked and for primary actions. The tokens are in `src/styles/index.css`:
+
+  | Token | Hex | Used for |
+  | --- | --- | --- |
+  | ink | `#172238` | text |
+  | canvas, paper | `#edf1f4`, `#ffffff` | page background, surfaces |
+  | carbon | `#2b3990` | booked slots, scheduled visits, primary actions, focus |
+  | leaf | `#17704a` | available slots, completed visits |
+  | saffron | `#9a4a06` | arrived (waiting) patients |
+  | vermilion | `#b0261e` | cancelled visits, destructive actions, errors |
+  | slate | `#5a6475` | slots in the past, drawn hatched |
+
+  Every text pairing was measured at 4.5:1 or better, and input borders at 3:1 against paper. Tailwind's default palette is switched off (`--color-*: initial`), so only these colors can be used.
+- **One typeface: Atkinson Hyperlegible Next**, self-hosted through Fontsource. The Braille Institute designed it so that look-alike characters stay distinct: `0` and `O`, `1`, `l` and `I`. In this app people read patient codes (`PAT-000001`), mobile numbers and times (`09:15`) all day, often in a hurry, so that is the property that matters. Its tabular figures (`tnum`) keep times lined up in columns.
+- **One bold element: the slot grid.** The login page shows a sample day sheet. Everything else is quiet: hairline borders, a different corner radius per level (tiles 6px, controls 8px, panels 12px), and shadows only on things that float (dialogs, toasts).
+- **Checked against the generic defaults** that the frontend-design guidance lists:
+  - Avoided: a cream background with terracotta, a near-black background with one acid accent, identical rounded cards with grey shadows, ALL-CAPS eyebrow labels, `A · B · C` metadata strings, monospace data labels, and `→` on buttons.
+  - Changed after review: the primary color started close to Tailwind's `indigo-600`, the stock SaaS blue. It was darkened and desaturated to carbon `#2b3990`.
+- **Copy.** Sentence case and plain verbs. A button says exactly what it does ("Log in", "Book appointment", "Mark as arrived"), and its toast uses the same words. Errors say what happened and what to do, without apologizing.
+
+### Architecture
+
+- **A typed contract.** `src/constants` mirrors the server's roles, statuses, limits and events, and `src/types/models.ts` mirrors API.md. `src/services/api.ts` unwraps the `{ success, message, data, meta }` envelope in one place (`getData`, `getPage`, `postData` and so on), so features get typed data and never touch axios.
+- **Errors are normalized once.** Every failure becomes an `ApiError` with a status, a message fit to show, the field errors from `meta.errors` and the request id. A 5xx never shows the server's text. "No response" and "timed out" get their own plain messages. Cancelled requests pass through untouched, so TanStack Query can tell them apart from failures.
+- **Two HTTP clients.** `authHttp` handles `/auth/*`: it sends the cookie but never an access token, and never refreshes. `http` handles everything else: it adds the bearer token and recovers from 401s:
+  - **One refresh for any number of 401s.** The refresh is a single shared promise, so every request that fails during it waits for the same answer and is then retried.
+  - **Late starters wait.** A request that starts while a refresh runs waits for it, instead of going out with the old token and failing.
+  - **No needless refresh.** A 401 for a token that has already been replaced is simply retried with the new one.
+  - **One retry per request**, so a request can never loop.
+  - **A refused refresh cookie ends the session.**
+
+  The tests drive the real interceptors through a fake adapter.
+- **Refreshes are serialized across tabs** with the Web Locks API. Reusing a refresh token makes the server revoke every session of the user (reuse detection). Without a lock, two tabs reloading at once would each send the same cookie, and the second would log the user out everywhere. With it, each tab's refresh sends the cookie the previous one rotated.
+- **Logout reaches every tab** through a `BroadcastChannel`. No other tab keeps working with a live access token for up to 15 minutes.
+- **The access token exists only in a module variable.** The session is a tiny external store (`services/auth-session.ts`) that React reads through `useSyncExternalStore`. `AuthContext`, the app's only React context, exposes it along with `signIn` and `signOut`.
+  - On page load the app restores the session silently: a refresh call that works if the cookie is still good. Because refreshes share one request, React StrictMode's double effect sends only one.
+  - When a session ends, the query cache is cleared and the socket closed, so no patient data stays in memory.
+- **Toasts live in an external store as well**, not a context. Any mutation callback can call `toast.success(...)`, and only the `<Toaster>` re-renders.
+- **Live updates.** One shared Socket.IO connection, opened while at least one screen needs it.
+  - Its `auth` option is a function, so every connection attempt carries a current token, refreshed first if it is about to expire.
+  - After the server closes the socket at token expiry, the client reconnects on its own.
+- **Routing and access.**
+  - One route table. Each page is lazy-loaded as its own chunk, through `lazyNamed` (the codebase has named exports only) with `Suspense`.
+  - `ProtectedRoute` sends signed-out users to the login page and brings them back to the page they asked for, with its query string.
+  - `RoleRoute` shows a 403 page at the same address.
+  - The navigation is built from the same role lists (`ROUTE_ACCESS`), so a link and its guard can't disagree.
+- **Errors while rendering.**
+  - An `ErrorBoundary` around the page outlet keeps the navigation usable when a page crashes, and resets when the route changes.
+  - A failed chunk load (a deploy while the tab was open) offers to reload the page.
+  - The router's `errorElement` catches anything that gets past both.
+- **Accessibility foundations.**
+  - A skip link, and on navigation focus moves to `<main>` and the tab title changes.
+  - The mobile menu is a native `<dialog>`: the browser traps focus, makes the page inert and closes it on Esc, and focus then returns to the menu button.
+  - One global `:focus-visible` ring, and `prefers-reduced-motion` is respected.
+  - `FormField` connects label, hint and error through ids, and an input's red border comes from its own `aria-invalid`, so what is seen and what is announced can't differ.
+- **The clinic's clock.**
+  - A new `VITE_CLINIC_TIMEZONE` (default `Asia/Kolkata`, like the server) decides "today" and past slots, whatever timezone the browser is in.
+  - Calendar arithmetic runs on UTC midnight of each `YYYY-MM-DD` date, so no browser offset can shift a day.
+  - Dates are formatted with `en-IN` ("Monday, 19 October 2026").
+- **TanStack Query defaults.** Only network errors and 5xx responses are retried, never a 4xx. How long data stays fresh depends on how fast it changes:
+  - 15 seconds for live data
+  - 30 seconds by default
+  - 5 minutes for doctors
+  - 30 minutes for departments
+- **Expected 401 on a first visit.** The silent refresh answers 401 when nobody is signed in on this browser, and Chrome logs every 4xx response in the console. That one request is expected, and the end-to-end checks allow it.
+
 ## Libraries and why
 
 | Library | Why |
@@ -291,6 +362,8 @@ Client libraries:
 | zod 4 | The server's validation library, so form rules and types come from the same kind of schema |
 | socket.io-client 4 | Matches the server's Socket.IO, for live scheduler updates |
 | Tailwind CSS 4 | Utility styling on shared design tokens, with no runtime |
+| lucide-react | Consistent, tree-shaken SVG icons, `aria-hidden` by default |
+| Fontsource (Atkinson Hyperlegible Next) | The typeface, self-hosted: no request to a third-party font CDN |
 | ESLint plugins: react-hooks, react-refresh, jsx-a11y-x, @tanstack/eslint-plugin-query | Hook rules, hot-reload-safe exports, accessibility and query-key checks |
 | Vitest, jsdom, Testing Library | Unit and component tests that run on the app's own Vite config |
 | Prettier, prettier-plugin-tailwindcss | Consistent formatting and class order |

@@ -96,12 +96,13 @@ The defaults expect the API at `http://localhost:5000`. To point the app somewhe
 
 ## Environment variables (client)
 
-Both are optional. They are checked when the app starts, and an invalid one stops it with the variable's name. They're compiled into the JavaScript bundle, so they're public: never put a secret in them.
+All three are optional. They are checked when the app starts, and an invalid one stops it with the variable's name. They're compiled into the JavaScript bundle, so they're public: never put a secret in them.
 
 | Variable | Description | Default |
 | --- | --- | --- |
 | `VITE_API_URL` | Base URL of the REST API, including `/api/v1`. A path such as `/api/v1` also works when a reverse proxy serves the API from the app's origin. | `http://localhost:5000/api/v1` |
 | `VITE_SOCKET_URL` | Origin of the Socket.IO server | The origin of `VITE_API_URL` |
+| `VITE_CLINIC_TIMEZONE` | IANA timezone of the clinic. It must match the server's `CLINIC_TIMEZONE`, so "today" and past slots follow the clinic's clock rather than the browser's. | `Asia/Kolkata` |
 
 ## API Documentation
 

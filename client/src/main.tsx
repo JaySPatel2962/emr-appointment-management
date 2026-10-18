@@ -1,8 +1,10 @@
+import '@fontsource-variable/atkinson-hyperlegible-next';
+import '@/styles/index.css';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { env } from '@/config/env';
-import '@/styles/index.css';
+import { App } from '@/app/App';
 
 const container = document.getElementById('root');
 if (!container) {
@@ -11,9 +13,6 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <main className="grid min-h-dvh place-content-center gap-2 p-6 text-center">
-      <h1 className="text-2xl font-semibold">EMR Appointments</h1>
-      <p>The client is set up and will call the API at {env.apiUrl}.</p>
-    </main>
+    <App />
   </StrictMode>,
 );

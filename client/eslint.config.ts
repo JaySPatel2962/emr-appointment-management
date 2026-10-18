@@ -68,6 +68,8 @@ export default defineConfig(
         'error',
         { checksVoidReturn: { attributes: false } },
       ],
+      // `onClick={() => setOpen(true)}` is the idiomatic React handler; braces would add noise.
+      '@typescript-eslint/no-confusing-void-expression': ['error', { ignoreArrowShorthand: true }],
       'no-restricted-globals': [
         'error',
         { name: 'localStorage', message: NO_BROWSER_STORAGE },
