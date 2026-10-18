@@ -9,19 +9,19 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUSES } from '@/constants/appointment';
 import type { AppointmentListParams } from '@/features/appointments/api';
-import { hasActiveFilters } from '@/features/appointments/utils/list-params';
+import { useTextFilters } from '@/features/appointments/hooks/useTextFilters';
+import {
+  hasActiveFilters,
+  TEXT_FILTER_MAX_LENGTH,
+} from '@/features/appointments/utils/list-params';
+import type { TextFilter } from '@/features/appointments/utils/list-params';
 import { useDepartments } from '@/features/departments/queries';
-import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { cn } from '@/utils/cn';
-
-const TYPING_DELAY_MS = 350;
 
 const STATUS_OPTIONS = APPOINTMENT_STATUSES.map((status) => ({
   value: status,
   label: APPOINTMENT_STATUS_LABELS[status],
 }));
-
-type TextFilter = 'patientName' | 'mobile' | 'doctorName';
 
 export interface AppointmentFiltersProps {
   params: AppointmentListParams;
@@ -43,23 +43,16 @@ export const AppointmentFilters = ({
 }: AppointmentFiltersProps) => {
   const panelId = useId();
   const [open, setOpen] = useState(false);
-  const [text, setText] = useState<Record<TextFilter, string>>({
-    patientName: params.patientName ?? '',
-    mobile: params.mobile ?? '',
-    doctorName: params.doctorName ?? '',
-  });
-  const pushText = useDebouncedCallback(onChange, TYPING_DELAY_MS);
+  const { text, change, clear: clearText } = useTextFilters(params, onChange);
   const { data: departments = [] } = useDepartments();
   const active = hasActiveFilters(params);
 
   const changeText = (key: TextFilter) => (event: ChangeEvent<HTMLInputElement>) => {
-    const { value } = event.target;
-    setText((current) => ({ ...current, [key]: value }));
-    pushText({ [key]: value.trim() === '' ? undefined : value.trim() });
+    change(key, event.target.value);
   };
 
   const clear = () => {
-    setText({ patientName: '', mobile: '', doctorName: '' });
+    clearText();
     onClear();
   };
 
@@ -98,6 +91,7 @@ export const AppointmentFilters = ({
               type="search"
               value={text.patientName}
               onChange={changeText('patientName')}
+              maxLength={TEXT_FILTER_MAX_LENGTH}
               autoComplete="off"
             />
           )}
@@ -122,6 +116,7 @@ export const AppointmentFilters = ({
                 type="search"
                 value={text.doctorName}
                 onChange={changeText('doctorName')}
+                maxLength={TEXT_FILTER_MAX_LENGTH}
                 autoComplete="off"
               />
             )}

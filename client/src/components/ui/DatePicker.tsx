@@ -1,5 +1,5 @@
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import {
@@ -24,7 +24,7 @@ import {
 } from '@/utils/date';
 
 export interface DatePickerProps {
-  /** The trigger's id, so a <FormField> label points at it. */
+  /** The trigger's id from a <FormField>: its label (`${id}-label`) and the date name the button. */
   id?: string | undefined;
   value: string | null;
   onChange: (date: string | null) => void;
@@ -33,7 +33,7 @@ export interface DatePickerProps {
   max?: string | undefined;
   /** Blocks extra dates, such as a doctor's days off. */
   isDateDisabled?: ((date: string) => boolean) | undefined;
-  /** Added to a blocked day's label: "Sunday, 18 October 2026, no sessions". */
+  /** Added to the label of a day `isDateDisabled` blocks: "Sunday, 18 October 2026, no sessions". */
   disabledLabel?: string | undefined;
   placeholder?: string | undefined;
   /** Offers a "Clear" button, for optional dates such as a filter. */
@@ -43,6 +43,9 @@ export interface DatePickerProps {
 }
 
 const POPOVER_WIDTH_PX = 304;
+
+/** Added to the label of a day before `min` or after `max`, such as a past day. */
+const OUT_OF_RANGE_LABEL = 'unavailable';
 
 const WEEKDAYS = Array.from({ length: 7 }, (_, index) => {
   const label = WEEKDAY_LABELS[(index + 1) % 7] ?? '';
@@ -77,14 +80,16 @@ export const DatePicker = ({
   const focusGrid = useRef(false);
   const popoverId = useId();
   const monthLabelId = useId();
+  const valueId = useId();
 
-  const isBlocked = useCallback(
-    (date: string) =>
-      (min !== undefined && date < min) ||
-      (max !== undefined && date > max) ||
-      (isDateDisabled?.(date) ?? false),
-    [min, max, isDateDisabled],
-  );
+  /** Why a day can't be picked, or null if it can. Past days aren't "no sessions" days. */
+  const blockedReason = (date: string): string | null => {
+    if ((min !== undefined && date < min) || (max !== undefined && date > max)) {
+      return OUT_OF_RANGE_LABEL;
+    }
+    return isDateDisabled?.(date) ? disabledLabel : null;
+  };
+  const isBlocked = (date: string): boolean => blockedReason(date) !== null;
 
   const close = (returnFocus: boolean) => {
     setOpen(false);
@@ -154,11 +159,14 @@ export const DatePicker = ({
         aria-expanded={open}
         aria-controls={open ? popoverId : undefined}
         aria-describedby={describedBy}
+        // Inside a <FormField> the name is its label plus the chosen date ("Date Mon, 19 Oct
+        // 2026"); a label alone would hide the value from screen readers.
+        aria-labelledby={id === undefined ? undefined : `${id}-label ${valueId}`}
         data-invalid={invalid ? '' : undefined}
         onClick={toggle}
         className={fieldClasses('flex h-10 items-center justify-between gap-2 text-left')}
       >
-        <span className={cn('truncate', value === null && 'text-ink-subtle')}>
+        <span id={valueId} className={cn('truncate', value === null && 'text-ink-subtle')}>
           {value === null ? placeholder : formatDateWithWeekday(value)}
         </span>
         <CalendarDays aria-hidden="true" size={18} className="shrink-0 text-ink-muted" />
@@ -221,7 +229,8 @@ export const DatePicker = ({
                     if (date === null) {
                       return <td key={`pad-${String(index)}`} />;
                     }
-                    const blocked = isBlocked(date);
+                    const reason = blockedReason(date);
+                    const blocked = reason !== null;
                     const selected = date === value;
                     // In a role="grid" table every cell is a gridcell; the day button carries the state.
                     return (
@@ -230,7 +239,7 @@ export const DatePicker = ({
                           type="button"
                           data-date={date}
                           tabIndex={date === focused ? 0 : -1}
-                          aria-label={`${formatDateLong(date)}${blocked ? `, ${disabledLabel}` : ''}`}
+                          aria-label={`${formatDateLong(date)}${reason === null ? '' : `, ${reason}`}`}
                           aria-pressed={selected}
                           aria-disabled={blocked || undefined}
                           aria-current={date === today ? 'date' : undefined}

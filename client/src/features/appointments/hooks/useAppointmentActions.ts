@@ -85,9 +85,17 @@ export const useAppointmentActions = () => {
 
 export type AppointmentActions = ReturnType<typeof useAppointmentActions>;
 
-/** Whether `action` is running for appointment `id`, read without re-rendering anything else. */
+/**
+ * Whether `action` is running for appointment `id`. The filter matches this appointment's own
+ * mutation only: an action on another row leaves this row's result (an empty list) as it was,
+ * so the row doesn't re-render.
+ */
 export const useIsActionPending = (action: AppointmentAction, id: string): boolean =>
   useMutationState({
-    filters: { mutationKey: appointmentMutationKeys[action], status: 'pending' },
-    select: (mutation) => mutation.state.variables,
-  }).some((variables) => variables === id);
+    filters: {
+      mutationKey: appointmentMutationKeys[action],
+      status: 'pending',
+      predicate: (mutation) => mutation.state.variables === id,
+    },
+    select: (mutation) => mutation.mutationId,
+  }).length > 0;

@@ -4,7 +4,7 @@ Appointment management module for an enterprise EMR system. It covers role-based
 
 > **Status:**
 > - The backend (`server/`) is complete and tested: 174 tests, about 92% line coverage.
-> - The frontend (`client/`) has every screen: login, dashboard, scheduler, booking, appointment list, and staff and schedules. Performance work and end-to-end tests are next.
+> - The frontend (`client/`) is complete: login, dashboard, scheduler, booking, appointment list, and staff and schedules. Unit and component tests cover its logic, and 79 Playwright end-to-end tests run it against the real API.
 > - Design decisions are recorded in [`docs/decisions-notes.md`](docs/decisions-notes.md).
 
 ## Tech stack
@@ -13,7 +13,7 @@ Appointment management module for an enterprise EMR system. It covers role-based
 - **Client:** React 19 (Vite 8), React Router 7, TanStack Query 5, axios, react-hook-form with zod, socket.io-client, Tailwind CSS 4, TypeScript (strict)
 - **Tooling:**
   - Server: tsx (development) and tsc (build); Vitest with supertest and mongodb-memory-server
-  - Client: Vite; Vitest with jsdom and Testing Library
+  - Client: Vite; Vitest with jsdom and Testing Library; Playwright with axe-core for end-to-end tests
   - Both: ESLint and Prettier
 
 ## Getting started (server)
@@ -101,9 +101,12 @@ The defaults expect the API at `http://localhost:5000`. To point the app somewhe
 | `npm run preview` | Serves the production build on port 5173 |
 | `npm run lint` | ESLint: type-aware, plus React Hooks, accessibility and TanStack Query rules |
 | `npm run format` | Prettier, which also sorts Tailwind classes |
-| `npm run typecheck` | `tsc --noEmit` for the app and the tool configs |
+| `npm run typecheck` | `tsc --noEmit` for the app, the tool configs and the end-to-end tests |
 | `npm test` | Vitest unit and component tests (jsdom) |
 | `npm run test:coverage` | The tests, plus a coverage report in `coverage/index.html` |
+| `npm run e2e` | Playwright end-to-end tests: the real API on an in-memory database, and a production build of the app |
+| `npm run e2e:ui` | The end-to-end tests in Playwright's UI mode, to watch or debug them |
+| `npm run e2e:report` | Opens the HTML report of the last end-to-end run, with screenshots |
 
 ## Environment variables (client)
 
@@ -312,7 +315,9 @@ Double booking is prevented by a unique index on `{ doctorId, date, slotStart }`
 
 ## Testing
 
-`npm test` runs two kinds of test. Unit tests cover the pure logic: slot generation, schedule rules, the clinic timezone, validation, error mapping and input sanitising. Integration tests go through the real HTTP API with supertest, against a real MongoDB: an in-memory replica set, so indexes and transactions behave as in production. Tests never touch Atlas.
+### Server
+
+`npm test` in `server/` runs two kinds of test. Unit tests cover the pure logic: slot generation, schedule rules, the clinic timezone, validation, error mapping and input sanitising. Integration tests go through the real HTTP API with supertest, against a real MongoDB: an in-memory replica set, so indexes and transactions behave as in production. Tests never touch Atlas.
 
 The integration tests prove the guarantees that matter:
 
@@ -327,6 +332,26 @@ The integration tests prove the guarantees that matter:
 - **Real-time events** over a real Socket.IO connection.
 - **A whole clinic day** with real logins, from creating staff to completing a visit, including the audit trail.
 
+### Client
+
+`npm test` in `client/` runs Vitest with Testing Library: the refresh queue, env validation, dates and the calendar, schedule rules, booking requests, the list's search boxes, and components such as the login form, the route guards, the slot grid and the table. Two of them count renders to prove the memoization works: a live update re-renders one slot tile, and a changed row re-renders one table row.
+
+`npm run e2e` in `client/` runs 79 Playwright tests in Chromium against the real API. Before the first test, global setup starts an in-memory MongoDB with its own database (`emr_appointments_e2e`) and the API on port 5100 in test mode, which never reads `server/.env`. It then seeds a clinic through the API: two doctors with morning and evening sessions and a lunch break, a receptionist and eight patients. Playwright serves a production build of the app on port 4173. Nothing touches your own database, and no `.env` is needed; ports 5100 and 4173 must be free.
+
+What the end-to-end tests check:
+
+- **Auth:** each role's login, a wrong password, the redirect back after login, a reload keeping the session, logout (in every tab), an expired access token renewed silently, and no token in web storage
+- **Access by role:** each role's menu, the 403 page for another role's page, a doctor seeing only their own appointments, and the 404 page
+- **Scheduler:** department and doctor filters kept in the URL, past days that can't be chosen, past, free and booked slots that look different, no slots in breaks, a doctor's day off, and the clinic's clock deciding "today" whatever the browser's timezone
+- **Booking:** finding a patient by ID, mobile or name, a debounced search, registering a new patient, validation, the confirmation, and the slot showing as booked
+- **Double booking:** two windows book one slot at the same moment; exactly one succeeds, and the other is told and sees the slot taken
+- **Live updates:** a booking, an update and a cancellation in another window appear without a reload; a window that changes day or page leaves the old room
+- **Appointment list:** paging and sorting on the server, every filter, the typing pause, the URL kept across a reload, and the loading, empty and error states
+- **Row actions:** edit, check in, cancel after a confirmation, an action someone else got to first (409), rebooking a cancelled slot, and a doctor completing a visit and writing notes only
+- **Staff and schedules:** adding a receptionist and a doctor, and editing a schedule with its overlap and working-hours errors
+- **Layout and quality:** no sideways scrolling at 375, 768 and 1280 px, axe-core (WCAG 2.2 AA) on every page and dialog, keyboard and focus behavior, and render counts in the production build (a live change re-renders one tile; an action on a row re-renders that row)
+- **Every test** fails on a console error or warning, an uncaught exception, a failed request or an unexpected error response.
+
 ## Project structure
 
 ```text
@@ -339,6 +364,7 @@ client/
             features/ (auth, dashboard, scheduler, booking, appointments, admin),
             services/ (HTTP, socket, query client), hooks/, utils/, types/,
             constants/, config/, styles/, test/
+  e2e/      Playwright specs; support/ holds the stack, seed data, fixtures and helpers
 docs/       assessment brief and design decision notes
 ```
 

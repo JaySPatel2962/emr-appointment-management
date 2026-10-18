@@ -457,7 +457,7 @@ Each optimization, why it was needed, and how it was checked.
   - **Slot tiles** (`React.memo`). The grid is long-lived and changes one slot at a time: live bookings, and a slot passing its start time. `SlotGrid.test.tsx` shows a live booking re-rendering 1 tile of 19 (plus the two break bands) instead of all 19. It works because `applyToSlots` keeps every unchanged slot's object.
   - **Table rows** (`React.memo` on rows, `useMemo` on the columns, `useCallback` on the row handlers). TanStack Query's structural sharing keeps unchanged rows as the same objects across a refetch. `Table.test.tsx` shows a refetch with one changed row rendering 1 row of 20.
   - The stable callbacks exist only so these memos hold; they are not used elsewhere.
-  - **Pending state per button.** A row's "Arrived" button reads its own pending state through `useMutationState`, so checking one patient in re-renders that button, not the table.
+  - **Pending state per button.** A row's "Arrived" button reads its own pending state through `useMutationState`, filtered to its own appointment, so checking one patient in re-renders that row's buttons, not the table. (The first version did re-render every row's buttons; the end-to-end render probe caught it. See Frontend Phase 5.)
   - **Nowhere else.** Forms are uncontrolled (react-hook-form), so typing doesn't re-render the form, and memoizing small pages would add bookkeeping without a measurable gain.
 - **Typing doesn't send requests.** Patient search waits 300 ms after typing stops and starts at two characters. The list's text filters wait 350 ms. Selects and dates apply at once.
 - **One clock for the whole app.** `useClinicClock` runs one interval, only while something uses it, and notifies only when the minute changes. Slots turn PAST at their time with no polling and no per-component timers.
@@ -476,11 +476,49 @@ The `design:accessibility-review` skill isn't available in this environment, so 
   - A dialog takes focus, never lets Tab reach the page behind it, closes on Esc and returns focus to what opened it. The mobile menu does the same, and closes when a link is followed.
   - Tabs follow the arrow-key and Home/End pattern.
 
+Both checks now run in the end-to-end suite (`e2e/quality.spec.ts`) on every run.
+
 Issues found and fixed while building:
 - `aria-invalid` on a button and on radios, which ARIA 1.2 doesn't allow there.
 - The date grid's roles.
 - Card-style radio labels that the label rule couldn't read.
 - A form label that pointed at nothing.
+
+## Frontend Phase 5: End-to-end tests
+
+79 Playwright tests in `client/e2e/`, run with `npm run e2e`. How they're built, and why:
+
+- **The real stack.** The tests drive a production build (`vite build`, served by `vite preview`) against the real API and a real MongoDB, so they test what users get, not mocks. Only three things are faked, each on purpose: a held response (the loading state), a 500 (the error state), and an expired token on one request.
+- **A database of its own.**
+  - Global setup starts mongodb-memory-server as a one-node replica set, because a booking that registers a patient runs in a transaction. The database is `emr_appointments_e2e`.
+  - The API runs with `NODE_ENV=test`, so it never reads `server/.env`.
+  - Its environment is built from a short allowlist, so a variable exported in the developer's shell can't change how it behaves.
+  - Each run gets new JWT secrets, fast bcrypt and no rate limits.
+- **Ports of its own:** the API on 5100 and the app on 4173, not the dev defaults. Both refuse to start when their port is taken, so a running dev server is never tested by mistake.
+- **Seeded through the API**, so the data gets the same validation, hashing and patient codes as real use. Dr. Mehta works 00:00 to 14:00 and 17:00 to 23:45 every day, so today always has past slots and free ones, whatever time the suite runs. The few tests that need a free slot later today skip after 22:45.
+- **Independent specs.** One worker, because the tests share one database and some need two windows acting at once. Each spec books on days of its own (`DAYS_AHEAD`), and its `beforeAll` seeding survives a worker restart (`ensureBooked`).
+- **Logins through the API.** The login form has its own tests. Elsewhere a test posts to `/auth/login` through the browser context's request client, which stores the refresh cookie in the browser as a real login does. Saved login states can't be reused: refresh tokens rotate, and presenting an old one ends every session.
+- **A guard on every test.** A test fails on any console error or warning, uncaught exception, failed request (except ones the page aborts itself) or error response it didn't declare with `guard.expectResponse()`. The one error expected by default is the 401 from `/auth/refresh` when the app opens signed out.
+- **Locators a screen reader would use.** Elements are found by role and accessible name, so every test also checks labelling. The one exception is reading a table column, through the cells' `data-label`.
+- **Races made deterministic.** The double-booking test holds both windows' booking requests until both are sent, then releases them together.
+- **Socket.IO read off the wire.** The tests record events on both transports (long polling, then WebSocket), so they can show which rooms a window joins and leaves, and that events for a room it left no longer reach it.
+- **Render counts in the production build.** `render-probe.ts` installs the hook React DevTools uses, which React calls after every commit, in production builds too. It counts the components that rendered (React's PerformedWork flag) and traces each one to the element it drew into. The tests show that:
+  - a live booking re-renders one tile of about 90;
+  - an idle grid renders no tile and sends no request;
+  - an action on a row re-renders that row only.
+- **An expired token** is a real one, signed with the run's own secret and with the API's issuer and audience, but expired a minute ago. It is swapped into one request.
+
+The tests found these bugs, now fixed:
+
+1. **The appointment list's search boxes** (`useTextFilters`, with unit tests):
+   - The debounced callback kept only its last call, so typing in two boxes within 350 ms dropped the first. Every box edited during one pause is now sent together.
+   - "Clear filters" pressed during that pause came undone when the waiting search went out. Clearing now cancels it (`useDebouncedCallback` gained `cancel`).
+   - The boxes kept their text when the URL changed some other way: the empty list's own "Clear filters", or the menu's link to the plain list. They now follow the URL, while text typed since the last pause is kept. A waiting search for a box the URL has overwritten is dropped.
+   - Text that can't be a filter, such as letters in the mobile box, no longer reaches the URL.
+2. **One action re-rendered every row.** `useMutationState` gives each subscriber the list of all matching mutations, so one pending "Arrived" changed every row's list, and with it every row's buttons. A `predicate` now limits each row to its own appointment's mutation. The render probe measured 9 rows of 9 before the fix and 1 after.
+3. **The date picker:**
+   - A past day was announced as "no sessions", the wording for a doctor's day off. A day outside the allowed range now says "unavailable".
+   - The date button is now named by its label and the date it shows ("Date Mon, 19 Oct 2026"), not by the label alone.
 
 ## Libraries and why
 
@@ -520,6 +558,9 @@ Client libraries:
 | Fontsource (Atkinson Hyperlegible Next) | The typeface, self-hosted: no request to a third-party font CDN |
 | ESLint plugins: react-hooks, react-refresh, jsx-a11y-x, @tanstack/eslint-plugin-query | Hook rules, hot-reload-safe exports, accessibility and query-key checks |
 | Vitest, jsdom, Testing Library | Unit and component tests that run on the app's own Vite config |
+| Playwright 1.64 | End-to-end tests in a real Chromium: several windows at once, network control, WebSocket frames, traces and screenshots |
+| @axe-core/playwright | WCAG 2.2 AA audits of each page and dialog in the end-to-end runs |
+| mongodb-memory-server | The end-to-end tests' throwaway MongoDB replica set, as in the server's own tests |
 | Prettier, prettier-plugin-tailwindcss | Consistent formatting and class order |
 
 ## Confirmed product decisions
@@ -549,6 +590,7 @@ Made without a specific instruction. Each is a small change if the clinic wants 
 - A slot inside a daylight-saving jump isn't handled specially. Asia/Kolkata has none.
 - Not built yet: a dashboard summary endpoint, an audit log viewer, patient editing, OpenAPI documentation and Docker.
 - Node 20 is end-of-life. Moving to Node 22 or 24 LTS also allows Vitest 5 and TypeScript 7.
+- The end-to-end tests run in Chromium only, one test at a time; Firefox and WebKit haven't been tried. A run that crosses midnight on the clinic's clock can fail, because "today" changes under it.
 - At much larger scale:
   - Archive past appointments by date.
   - Cache slot grids for a few seconds.

@@ -16,7 +16,16 @@ export const DEFAULT_LIST_PARAMS: AppointmentListParams = {
   sortOrder: 'asc',
 };
 
-const text = z.string().trim().min(1).max(100).optional().catch(undefined);
+/** The longest search the list's text filters take, as the API allows. */
+export const TEXT_FILTER_MAX_LENGTH = 100;
+
+const text = z.string().trim().min(1).max(TEXT_FILTER_MAX_LENGTH).optional().catch(undefined);
+const mobile = z
+  .string()
+  .trim()
+  .regex(/^\+?[\d\s().-]{1,20}$/)
+  .optional()
+  .catch(undefined);
 const id = z
   .string()
   .regex(/^[a-f\d]{24}$/i)
@@ -34,12 +43,7 @@ const paramsSchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).catch(DEFAULT_LIST_PARAMS.sortOrder),
   status: z.enum(APPOINTMENT_STATUSES).optional().catch(undefined),
   patientName: text,
-  mobile: z
-    .string()
-    .trim()
-    .regex(/^\+?[\d\s().-]{1,20}$/)
-    .optional()
-    .catch(undefined),
+  mobile,
   doctorName: text,
   departmentId: id,
   dateFrom: date,
@@ -47,6 +51,19 @@ const paramsSchema = z.object({
 });
 
 const KEYS = Object.keys(paramsSchema.shape) as (keyof AppointmentListParams)[];
+
+/** The filters typed into a search box rather than picked from a list. */
+export const TEXT_FILTERS = [
+  'patientName',
+  'mobile',
+  'doctorName',
+] as const satisfies readonly (keyof AppointmentListParams)[];
+
+export type TextFilter = (typeof TEXT_FILTERS)[number];
+
+/** What the URL keeps of a search box: its trimmed text, or nothing if empty or invalid. */
+export const parseTextFilter = (key: TextFilter, value: string): string | undefined =>
+  paramsSchema.shape[key].parse(value);
 
 export const parseListParams = (search: URLSearchParams): AppointmentListParams => {
   const raw = Object.fromEntries(KEYS.map((key) => [key, search.get(key) ?? undefined]));

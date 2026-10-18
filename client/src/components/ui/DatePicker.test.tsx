@@ -70,7 +70,8 @@ describe('DatePicker', () => {
     render(<Harness initial="2026-10-19" onChange={onChange} isDateDisabled={sundays} />);
 
     await openPicker(user);
-    const past = screen.getByRole('button', { name: 'Friday, 9 October 2026, no sessions' });
+    // A day before the minimum is unavailable; only the doctor's days off have no sessions.
+    const past = screen.getByRole('button', { name: 'Friday, 9 October 2026, unavailable' });
     const sunday = screen.getByRole('button', { name: 'Sunday, 25 October 2026, no sessions' });
     expect(past).toHaveAttribute('aria-disabled', 'true');
 

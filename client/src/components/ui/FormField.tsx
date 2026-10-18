@@ -40,7 +40,13 @@ export const FormField = ({
 
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
-      <label htmlFor={id} className={cn('text-sm font-semibold text-ink', hideLabel && 'sr-only')}>
+      {/* `${id}-label` lets a control that shows a value, like the date button, name itself
+          with both the label and that value. */}
+      <label
+        id={`${id}-label`}
+        htmlFor={id}
+        className={cn('text-sm font-semibold text-ink', hideLabel && 'sr-only')}
+      >
         {label}
         {optional ? <span className="font-normal text-ink-muted"> (optional)</span> : null}
       </label>

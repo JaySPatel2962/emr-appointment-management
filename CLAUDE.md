@@ -17,6 +17,7 @@ Enterprise EMR appointment management module (MERN). Code quality and architectu
   - `features/<feature>/`: auth, dashboard, scheduler, booking, appointments, admin, plus doctors, departments and patients. Each has `api.ts`, `hooks/`, `components/`, `pages/` and `schemas.ts`.
   - `services/`: the HTTP client, the socket and the query client
   - `hooks/`, `utils/`, `types/`, `constants/`, `config/`, `styles/`, `test/`
+- `client/e2e/`: Playwright specs; `support/` holds the test stack, seed data, fixtures and helpers
 
 ## Architecture rules
 - Request flow: routes -> validators -> controllers -> services -> models
@@ -105,9 +106,11 @@ Client (run in `client/`):
 - `npm run dev`: start the app on http://localhost:5173, the API's default `CLIENT_URL`
 - `npm run build`, then `npm run preview`: type-check and build to `dist/`, then serve the build on the same port
 - `npm run lint` / `npm run format`: ESLint / Prettier
-- `npm run typecheck`: `tsc --noEmit` for the app (`tsconfig.json`) and the tool configs (`tsconfig.node.json`)
+- `npm run typecheck`: `tsc --noEmit` for the app (`tsconfig.json`), the tool configs (`tsconfig.node.json`) and the end-to-end tests (`e2e/tsconfig.json`)
 - `npm test`: Vitest unit and component tests (jsdom)
 - `npm run test:coverage`: the tests plus a coverage report
+- `npm run e2e`: Playwright end-to-end tests against the real API and a production build (see End-to-end tests below)
+- `npm run e2e:ui` / `npm run e2e:report`: the same in Playwright's UI mode / the HTML report of the last run
 
 ## Backend status
 All backend phases are done and committed on `feat/backend`: 174 tests pass, about 92% line coverage.
@@ -211,9 +214,24 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
     - component tests for the login form, ProtectedRoute and RoleRoute, the slot grid and the table
     - axe-core on 23 screen states, with no violations
     - scripted keyboard and focus checks
-- Next:
-  - 5 Playwright end-to-end tests against the real API
+  - 5 end-to-end tests: 79 Playwright tests in `client/e2e/` covering auth, RBAC, the scheduler, booking, double booking, live updates, the list, row actions, admin, the dashboard, three screen widths, accessibility and render counts. Fixes they led to:
+    - the list's text filters: two boxes edited in one pause both apply, "Clear filters" can't be undone by a search still waiting, and the boxes follow the URL when it changes elsewhere (`useTextFilters`)
+    - a row action re-rendered every row's buttons; now only its own (`useIsActionPending`)
+    - the date picker named a past day "no sessions"; it now says "unavailable", and its button is named by its label and date
 - Design decisions: the Frontend sections of `docs/decisions-notes.md`
+
+### End-to-end tests (`client/e2e/`)
+- Run `npm run e2e` in `client/`. It needs `npm install` done in both `server/` and `client/`, and ports 5100 and 4173 free. No `.env` and no database are needed.
+- What a run does:
+  - Global setup (`e2e/global-setup.ts`) starts an in-memory MongoDB replica set with the database `emr_appointments_e2e`, runs the server's seed script, and starts the real API on :5100 with `NODE_ENV=test`. In test mode the server never reads `server/.env`, so the developer's data is never touched. The JWT secrets are generated for the run.
+  - It seeds the clinic through the API (`e2e/support/seed.ts`): a receptionist, Dr. Kavya Mehta (Cardiology, every day 00:00-14:00 and 17:00-23:45, lunch 12:00-13:00) and Dr. Arjun Rao (Dermatology, Monday to Saturday, 10:00-14:00 and 17:00-20:00, lunch 12:20-13:00), eight patients, and 25 appointments for the list. The logins are in `e2e/support/seed-data.ts`.
+  - Playwright builds the app into `dist-e2e/`, pointed at that API, and serves it with `vite preview` on :4173. The browser runs Chromium in en-IN on the clinic's timezone.
+  - Afterwards the API stops and the database is dropped. The API's log is `client/test-results/api.log`; failures keep a trace and a screenshot in `test-results/`, and `npm run e2e:report` opens the HTML report with screenshots of each screen.
+- Writing tests:
+  - Import `test` and `expect` from `e2e/support/fixtures.ts`. Its `guard` fails a test on any console error or warning, uncaught exception, failed request or error response. A test that provokes one says so first: `guard.expectResponse(409, /\/appointments$/)`.
+  - Find elements by role and accessible name, with the helpers in `e2e/support/app.ts`. Sign in with `openAs()` (an API login that leaves the refresh cookie), and open a second user's window with the `openWindow` fixture.
+  - Each spec books on days of its own (`suiteDate()` in `e2e/support/dates.ts`), so the specs don't depend on each other or on their order. Seed in `beforeAll` with `ensureBooked()`, which survives a rerun.
+  - `e2e/support/render-probe.ts` counts React renders in the production build, and `e2e/support/socket.ts` records Socket.IO events.
 
 ### Client env vars (`client/.env.local`; see `client/.env.example`)
 - `VITE_API_URL` (http://localhost:5000/api/v1): the REST API, including `/api/v1`. A path such as `/api/v1` also works behind a same-origin reverse proxy.

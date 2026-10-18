@@ -12,7 +12,16 @@ const NO_BROWSER_STORAGE =
   'Nothing is persisted in browser storage; the access token lives in memory only.';
 
 export default defineConfig(
-  { ignores: ['dist/', 'coverage/', 'node_modules/', 'playwright-report/', 'test-results/'] },
+  {
+    ignores: [
+      'dist/',
+      'dist-e2e/',
+      'coverage/',
+      'node_modules/',
+      'playwright-report/',
+      'test-results/',
+    ],
+  },
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
@@ -117,6 +126,16 @@ export default defineConfig(
     // Tool config files run in Node and must default-export their config.
     files: ['*.config.ts'],
     languageOptions: { globals: globals.node },
+    rules: { 'no-restricted-syntax': 'off' },
+  },
+  {
+    // The end-to-end tests run in Node; the functions they hand to page.evaluate run in the page.
+    files: ['e2e/**/*.ts'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
+  {
+    // Playwright loads the global setup through its default export.
+    files: ['e2e/global-setup.ts'],
     rules: { 'no-restricted-syntax': 'off' },
   },
   prettierConfig,
