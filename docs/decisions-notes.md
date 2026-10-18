@@ -428,6 +428,60 @@ Every index exists because a query needs it, since each extra index slows writes
   - The doctor, department and date fields stack in the booking form's narrow column, and line up in the scheduler's wide panel.
 - **The one inline style:** the data-driven width of a chart bar, which no static class can express.
 
+## Frontend Phase 4: Performance and quality
+
+Each optimization, why it was needed, and how it was checked.
+
+- **Pages load on demand.** Every route is its own chunk (`lazyNamed` with `Suspense`). Gzipped, each page is 2 to 6 KB of app code: login 1.9, dashboard 3.2, scheduler 2.8, list 5.1, booking 5.5, admin 6.4. So a receptionist who never opens the admin page never downloads it.
+- **Libraries get chunks of their own** (Rolldown `codeSplitting.groups`), because libraries change far less often than the app. A deploy re-downloads only app chunks, while the vendor chunks stay cached under their hashes.
+
+  | Chunk | Size (gzipped) | When it loads |
+  | --- | --- | --- |
+  | `vendor-react` | 100 KB | At startup |
+  | `vendor-data` (TanStack Query, axios) | 29 KB | At startup |
+  | `vendor-zod` | 24 KB | At startup, for env validation and every form |
+  | `vendor-forms` (react-hook-form) | 14 KB | With the first form |
+  | `vendor-socket` | 13 KB | With the first live screen |
+
+  zod sits apart from react-hook-form, because startup needs zod but not forms.
+- **Server state: fewer requests, and none repeated.**
+  - Each set of filters is its own cache entry, so going back to a filter or page shows the cached result at once.
+  - How long data stays fresh depends on how fast it changes: departments 30 minutes, doctors 5 minutes, live data 15 seconds.
+  - Paging, filtering and patient search keep the previous results on screen while the next ones load: no layout jump, and no skeleton flash on a refetch.
+  - A doctor's detail starts from the list already in the cache.
+  - Derived views (names by id, the day's appointments by id) come from `select`, which TanStack Query only reruns when the data changes.
+  - Only network errors and 5xx are retried; a 4xx would fail again.
+  - Polling only where nothing else covers it: the open slot grid and the dashboard, every 60 seconds.
+- **Updates patch the cache instead of refetching.** A booking, check-in or cancellation, whether from this tab or another user's socket event, updates the slot grid and the day lists in place (`syncAppointment`). Refetches are left to paged lists, which can't be patched safely.
+- **Memoization only where it is measured.** Two tests count renders deterministically:
+  - **Slot tiles** (`React.memo`). The grid is long-lived and changes one slot at a time: live bookings, and a slot passing its start time. `SlotGrid.test.tsx` shows a live booking re-rendering 1 tile of 19 (plus the two break bands) instead of all 19. It works because `applyToSlots` keeps every unchanged slot's object.
+  - **Table rows** (`React.memo` on rows, `useMemo` on the columns, `useCallback` on the row handlers). TanStack Query's structural sharing keeps unchanged rows as the same objects across a refetch. `Table.test.tsx` shows a refetch with one changed row rendering 1 row of 20.
+  - The stable callbacks exist only so these memos hold; they are not used elsewhere.
+  - **Pending state per button.** A row's "Arrived" button reads its own pending state through `useMutationState`, so checking one patient in re-renders that button, not the table.
+  - **Nowhere else.** Forms are uncontrolled (react-hook-form), so typing doesn't re-render the form, and memoizing small pages would add bookkeeping without a measurable gain.
+- **Typing doesn't send requests.** Patient search waits 300 ms after typing stops and starts at two characters. The list's text filters wait 350 ms. Selects and dates apply at once.
+- **One clock for the whole app.** `useClinicClock` runs one interval, only while something uses it, and notifies only when the minute changes. Slots turn PAST at their time with no polling and no per-component timers.
+- **One socket**, opened while a live screen needs it. It joins only the room on screen, so no other doctor's events are sent to it (Super Admins excepted, who are filtered on arrival).
+- **Fonts and CSS.** The variable font is self-hosted, Latin and Latin Extended only (`unicode-range`), with `font-display: swap`. Tailwind emits only the classes in use: 35 KB, 7.9 KB gzipped.
+
+### Accessibility review
+
+The `design:accessibility-review` skill isn't available in this environment, so its job was done with two checks in Chromium, against the real API:
+
+- **axe-core** (WCAG 2.0, 2.1 and 2.2 A and AA, plus best practices) on 23 screen states. That covers every page and every dialog (details, edit, cancel, the date picker, the mobile menu), with forms showing their errors, at desktop and phone widths, and as each role. Result: **no violations**.
+- **Keyboard and focus, scripted:**
+  - The login works from the keyboard alone.
+  - The skip link is the first tab stop and moves focus to `<main>`.
+  - After navigation, focus moves to `<main>` and the tab title changes.
+  - A dialog takes focus, never lets Tab reach the page behind it, closes on Esc and returns focus to what opened it. The mobile menu does the same, and closes when a link is followed.
+  - Tabs follow the arrow-key and Home/End pattern.
+
+Issues found and fixed while building:
+- `aria-invalid` on a button and on radios, which ARIA 1.2 doesn't allow there.
+- The date grid's roles.
+- Card-style radio labels that the label rule couldn't read.
+- A form label that pointed at nothing.
+
 ## Libraries and why
 
 | Library | Why |

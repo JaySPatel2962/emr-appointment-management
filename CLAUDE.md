@@ -205,8 +205,13 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
     - booking: an existing or new patient, with 409 handling
     - appointment list: URL filters and row actions
     - staff and schedules: the schedule editor
+  - 4 performance and quality:
+    - vendor chunks
+    - memoization proven by render-count tests (slot tiles, table rows)
+    - component tests for the login form, ProtectedRoute and RoleRoute, the slot grid and the table
+    - axe-core on 23 screen states, with no violations
+    - scripted keyboard and focus checks
 - Next:
-  - 4 performance and quality
   - 5 Playwright end-to-end tests against the real API
 - Design decisions: the Frontend sections of `docs/decisions-notes.md`
 

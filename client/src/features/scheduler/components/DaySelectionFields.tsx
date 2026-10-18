@@ -72,7 +72,11 @@ export const DaySelectionFields = ({
             </FormField>
             <FormField
               label="Doctor"
-              error={doctorError}
+              error={
+                doctorsQuery.isError
+                  ? "Couldn't load the doctors. Reload the page to try again."
+                  : doctorError
+              }
               hint={doctorsQuery.isPending ? 'Loading doctors' : undefined}
             >
               {(control) => (
