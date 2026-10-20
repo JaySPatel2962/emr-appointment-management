@@ -2683,6 +2683,7 @@ A page after the last one returns an empty `data` array. With no matches:
 
 - **Filters combine with AND:** an appointment must match every filter given.
 - **Sorting** uses the field in `sortBy` in the direction of `sortOrder`. `patientName` sorts without regard to case. `date` also sorts by `slotStart` within a day. Every sort ends with the appointment id, so pages never overlap or skip an item when values tie.
+- **How a sort is served.** Every sort of the unfiltered list is read in order from an index, one page at a time. A search by patient name, mobile number or patient ID instead finds its matches through that field's index and sorts them in memory: a prefix match is a range on one index, which can't also give another field's order. A search matches a few dozen appointments at most, so this costs nothing measurable, and it is kept by design ([DATABASE_DESIGN.md §10](DATABASE_DESIGN.md#10-query-optimization-strategy); manual QA, Q-09). `GET /patients` with a search term works the same way.
 - **Doctors** always see only their own appointments, whatever the filters say.
 - A parameter with an invalid value gets `400`, never an empty page.
 

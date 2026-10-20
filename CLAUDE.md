@@ -234,7 +234,7 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
   - clipped times in the schedule editor on phones (R2)
   - no sort control at 768 px (R2)
 
-  Of its open questions, Q-02, Q-03, Q-06 and Q-07 were resolved by changes; Q-01, Q-04 and Q-05 are kept and listed in the README's Assumptions and Known limitations; Q-08, from the retest, was resolved by a version check on schedule saves; Q-09 is a product decision still to take. The throwaway scripts in `qa/` and `qa-credentials.local.md` are gitignored.
+  Of its open questions, Q-02, Q-03, Q-06 and Q-07 were resolved by changes; Q-01, Q-04 and Q-05 are kept and listed in the README's Assumptions and Known limitations; From the retest, Q-08 was resolved by a version check on schedule saves, and Q-09 (searches sort a few dozen matches in memory) is kept. The throwaway scripts in `qa/` and `qa-credentials.local.md` are gitignored.
 - Design decisions: the Frontend sections of `docs/decisions-notes.md`
 
 ### End-to-end tests (`client/e2e/`)
