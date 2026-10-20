@@ -19,11 +19,19 @@ import { EMPTY_RANGE, standardWeek } from '@/features/admin/utils/schedule-form'
 type ScheduleForm = UseFormReturn<ScheduleFormValues, unknown, ScheduleFormOutput>;
 type RangeKind = 'sessions' | 'breaks';
 
-const KIND_LABELS: Readonly<Record<RangeKind, { title: string; one: string; hint: string }>> = {
-  sessions: { title: 'Sessions', one: 'session', hint: 'When the doctor sees patients.' },
+const KIND_LABELS: Readonly<
+  Record<RangeKind, { title: string; one: string; caption: string; hint: string }>
+> = {
+  sessions: {
+    title: 'Sessions',
+    one: 'session',
+    caption: 'Session',
+    hint: 'When the doctor sees patients.',
+  },
   breaks: {
     title: 'Breaks',
     one: 'break',
+    caption: 'Break',
     hint: 'No slots are offered inside a break, such as lunch.',
   },
 };
@@ -44,21 +52,29 @@ const RangeList = ({ form, dayIndex, dayName, kind }: RangeListProps) => {
   const { fields, append, remove } = useFieldArray({ control, name: `days.${dayIndex}.${kind}` });
   const listErrors = errors.days?.[dayIndex]?.[kind];
   const listMessage = listErrors?.message ?? listErrors?.root?.message;
-  const { title, one, hint } = KIND_LABELS[kind];
+  const { title, one, caption, hint } = KIND_LABELS[kind];
 
   return (
     <fieldset className="min-w-0">
       <legend className="text-sm font-semibold text-ink">{title}</legend>
       <p className="mb-2 text-xs text-ink-muted">{hint}</p>
       {fields.length === 0 ? <p className="mb-2 text-sm text-ink-muted">No {kind}.</p> : null}
-      <ul className="flex flex-col gap-2">
+      {/*
+        A range is one row: start, "to", end, remove. Below 18rem that leaves each time box too
+        narrow to show "09:00" beside the browser's clock button, so the range's name and its
+        remove button take a line of their own and the two times share the full width.
+      */}
+      <ul className="@container flex flex-col gap-2">
         {fields.map((field, rangeIndex) => {
           const rangeError = listErrors?.[rangeIndex];
           const label = `${dayName} ${one} ${String(rangeIndex + 1)}`;
           return (
             <li key={field.id}>
-              <div className="flex items-center gap-2">
-                <FormField label={`${label} starts`} hideLabel className="min-w-0 flex-1">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 @2xs:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]">
+                <span aria-hidden="true" className="col-span-2 text-sm text-ink-muted @2xs:hidden">
+                  {caption} {rangeIndex + 1}
+                </span>
+                <FormField label={`${label} starts`} hideLabel className="min-w-0">
                   {(control) => (
                     <Input
                       {...control}
@@ -72,7 +88,7 @@ const RangeList = ({ form, dayIndex, dayName, kind }: RangeListProps) => {
                 <span aria-hidden="true" className="text-sm text-ink-muted">
                   to
                 </span>
-                <FormField label={`${label} ends`} hideLabel className="min-w-0 flex-1">
+                <FormField label={`${label} ends`} hideLabel className="min-w-0">
                   {(control) => (
                     <Input
                       {...control}
@@ -87,6 +103,7 @@ const RangeList = ({ form, dayIndex, dayName, kind }: RangeListProps) => {
                   variant="ghost"
                   size="icon"
                   aria-label={`Remove ${label}`}
+                  className="col-start-3 row-start-1 justify-self-end @2xs:col-start-4"
                   disabled={kind === 'sessions' && fields.length === 1}
                   onClick={() => remove(rangeIndex)}
                 >

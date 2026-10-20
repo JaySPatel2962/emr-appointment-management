@@ -445,6 +445,7 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Container queries where a component lives in more than one width.**
   - The table switches between cards and rows at a container width of 48rem, not at a screen width, because the same table sits beside the sidebar on a desktop and alone on a tablet.
   - The doctor, department and date fields stack in the booking form's narrow column, and line up in the scheduler's wide panel.
+  - A schedule range is one row (start, "to", end, remove) from a container width of 18rem. Below that, the range's name and remove button take a line of their own, so the two times share the full width. A time box needs 104 px to show "09:00" beside Chromium's clock button; on a phone the one-row layout left 88 to 95 px, and the manual retest found times reading "09:0".
 - **Long words never widen a layout.** Names and purposes are typed by people, and some can't wrap at a space: a long South Indian name, or a list of tests joined by "/". Manual QA found such text pushing the list's row actions 238 px out of view at 1280 px, widening slot tiles into their neighbours, and making the dashboard and booking form scroll sideways on a phone. Three rules prevent it:
   - Table cells wrap anywhere (`wrap-anywhere`), so a column is never wider than it needs to be for wrapped text.
   - A slot tile has `min-w-0`, so its name is truncated instead of setting the tile's width.

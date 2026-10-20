@@ -25,6 +25,10 @@ const DAY = suiteDate('responsive');
 const LONG_NAME = 'Srivenkatanarasimharajuvaripetasubrahmanyamsastry';
 const LONG_PURPOSE = 'ECG/ECHO/TMT/Holter/LipidProfile/HbA1c/TSH/CBC/LFT/KFT/UrineRoutine';
 
+// The narrowest time box that shows "09:00" next to Chromium's clock button, with the fields'
+// 12 px padding (measured in the manual retest).
+const TIME_BOX_MIN_WIDTH = 104;
+
 const SIZES = [
   { name: 'phone', width: 375, height: 812 },
   { name: 'tablet', width: 768, height: 1024 },
@@ -161,6 +165,22 @@ for (const size of SIZES) {
       await page.getByRole('radio', { name: new RegExp(LONG_NAME) }).click();
       await expect(page.getByRole('button', { name: 'Change patient' })).toBeVisible();
       expect(await horizontalOverflow(page), 'booking').toBe(0);
+    });
+
+    // Found in the manual retest: on a phone each time box in the schedule editor was 88 px wide,
+    // so "09:00" read "09:0".
+    test('the schedule editor shows each time in full', async ({ page }) => {
+      const { doctors } = seedInfo();
+      await signIn(page.context(), ADMIN);
+      await page.goto(`/admin?tab=schedules&doctor=${doctors.arjun.id}`);
+      await expect(page.getByLabel('Monday session 1 starts')).toBeVisible();
+      const narrowest = await page
+        .locator('input[type="time"]')
+        .evaluateAll((inputs) =>
+          Math.min(...inputs.map((input) => input.getBoundingClientRect().width)),
+        );
+      expect(narrowest, 'the narrowest time box, in px').toBeGreaterThanOrEqual(TIME_BOX_MIN_WIDTH);
+      expect(await horizontalOverflow(page), 'schedule editor').toBe(0);
     });
 
     test('the navigation and the list fit the screen', async ({ page }) => {

@@ -339,7 +339,7 @@ The integration tests prove the guarantees that matter:
 
 `npm test` in `client/` runs Vitest with Testing Library: the refresh queue, env validation, dates and the calendar, schedule rules, booking requests, the list's search boxes, and components such as the login form, the route guards, the slot grid and the table. Two of them count renders to prove the memoization works: a live update re-renders one slot tile, and a changed row re-renders one table row.
 
-`npm run e2e` in `client/` runs 85 Playwright tests in Chromium against the real API. Before the first test, global setup starts an in-memory MongoDB with its own database (`emr_appointments_e2e`) and the API on port 5100 in test mode, which never reads `server/.env`. It then seeds a clinic through the API: two doctors with morning and evening sessions and a lunch break, a receptionist and eight patients. Playwright serves a production build of the app on port 4173. Nothing touches your own database, and no `.env` is needed; ports 5100 and 4173 must be free.
+`npm run e2e` in `client/` runs 88 Playwright tests in Chromium against the real API. Before the first test, global setup starts an in-memory MongoDB with its own database (`emr_appointments_e2e`) and the API on port 5100 in test mode, which never reads `server/.env`. It then seeds a clinic through the API: two doctors with morning and evening sessions and a lunch break, a receptionist and eight patients. Playwright serves a production build of the app on port 4173. Nothing touches your own database, and no `.env` is needed; ports 5100 and 4173 must be free.
 
 What the end-to-end tests check:
 

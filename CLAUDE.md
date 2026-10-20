@@ -216,7 +216,7 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
     - component tests for the login form, ProtectedRoute and RoleRoute, the slot grid and the table
     - axe-core on 23 screen states, with no violations
     - scripted keyboard and focus checks
-  - 5 end-to-end tests: 85 Playwright tests in `client/e2e/` covering auth, RBAC, the scheduler, booking, double booking, live updates, the list, row actions, admin, the dashboard, three screen widths, accessibility and render counts. Fixes they led to:
+  - 5 end-to-end tests: 88 Playwright tests in `client/e2e/` covering auth, RBAC, the scheduler, booking, double booking, live updates, the list, row actions, admin, the dashboard, three screen widths, accessibility and render counts. Fixes they led to:
     - the list's text filters: two boxes edited in one pause both apply, "Clear filters" can't be undone by a search still waiting, and the boxes follow the URL when it changes elsewhere (`useTextFilters`)
     - a row action re-rendered every row's buttons; now only its own (`useIsActionPending`)
     - the date picker named a past day "no sessions"; it now says "unavailable", and its button is named by its label and date
