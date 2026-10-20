@@ -564,7 +564,21 @@ Smaller observations, not bugs:
 
 ## Final regression runs
 
-Run on Tuesday 20 Oct at about 16:50 IST, after the Q changes and all twelve fixes:
+**From a clean clone,** Tuesday 20 Oct at about 20:00 IST, after the Q-08 and Q-09 changes and the README. Only the README's steps were followed: `npm install`, copy `.env.example`, `npm run secrets`, `npm run seed` against a new local replica set, then `npm run dev`. The seeded Super Admin logged in, created a doctor and booked a new patient (both transactions), and logged out. Every gate passed:
+
+| Gate | Server | Client |
+| --- | --- | --- |
+| Prettier, ESLint, `tsc --noEmit` | clean | clean |
+| Unit and integration tests | **226 passed** (31 files) | **117 passed** (24 files) |
+| Production build | clean | clean |
+| End-to-end (`npm run e2e`) | | **92 passed** (4.7 min) |
+
+The Postman collection ran through newman against that API, with no `Origin` header: 20 requests and 20 assertions passed, covering all 19 routes the server defines. The clean clone found three gaps in the README, now fixed:
+- The local MongoDB folder has to exist before `mongod` starts, and it is now gitignored.
+- `mongosh` is a separate install.
+- The end-to-end tests need `npx playwright install chromium` once, and the first test run downloads a MongoDB binary.
+
+Earlier, on Tuesday 20 Oct at about 16:50 IST, after the Q changes and all twelve fixes:
 
 | Gate | Server | Client |
 | --- | --- | --- |

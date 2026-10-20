@@ -1,3 +1,6 @@
+# A local MongoDB data folder (see the README's installation steps)
+mongo-data/
+
 # Dependencies and build output
 node_modules/
 dist/

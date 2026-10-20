@@ -305,14 +305,18 @@ Rooms are `scheduler:{doctorId}:{date}`, and a screen sends `scheduler:leave` wh
 - **Node.js 20.19 or later**, with npm. Node 22 or 24 LTS is recommended, since Node 20 is end-of-life.
 - **A MongoDB 6+ replica set.** Bookings that register a patient, and doctor creation, use transactions, which a standalone `mongod` refuses. Either:
   - **MongoDB Atlas:** any cluster is a replica set; use its connection string.
-  - **Local:** start a single-node replica set and initiate it once:
+  - **Local:** start a single-node replica set and initiate it once. `mongod` needs its data folder to exist, and `mongosh` is the MongoDB Shell, a separate download from the server. `mongo-data/` is gitignored, so the folder can sit in the repository's root:
 
     ```bash
+    mkdir mongo-data
     mongod --replSet rs0 --port 27017 --dbpath ./mongo-data
+    # in another terminal, once:
     mongosh --eval "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] })"
+    # then, in server/.env:
     # MONGO_URI=mongodb://127.0.0.1:27017/emr_appointments?replicaSet=rs0
     ```
 - **Free ports** 5000 (API) and 5173 (app). The end-to-end tests use 5100 and 4173 instead.
+- **For the tests only:** the first run of the server tests or the end-to-end tests downloads a MongoDB binary (mongodb-memory-server, about 100 MB, cached afterwards). The end-to-end tests also need Playwright's Chromium, installed once with `npx playwright install chromium` in `client/`.
 
 **Steps:**
 
@@ -361,6 +365,7 @@ In production, serve `client/dist` from any static host or a reverse proxy, and 
 | both | `npm test` | Unit and integration tests (server); unit and component tests (client) |
 | both | `npm run test:coverage` | The tests with a coverage report in `coverage/index.html` |
 | both | `npm run lint`, `npm run typecheck`, `npm run format` | ESLint, `tsc --noEmit`, Prettier |
+| client | `npx playwright install chromium` | Once, before the first end-to-end run: the browser the tests drive |
 | client | `npm run e2e` | Playwright end-to-end tests: the real API on an in-memory database, and a production build |
 | client | `npm run e2e:ui`, `npm run e2e:report` | The same in Playwright's UI mode; the last run's HTML report |
 
@@ -377,7 +382,7 @@ In production, serve `client/dist` from any static host or a reverse proxy, and 
   - the refresh queue, dates, schedule rules and booking requests
   - components such as the login form, the route guards, the slot grid, the table and the schedule editor
   - render counts that prove the memoization: a live update re-renders one slot tile, a changed row one table row
-- **End-to-end** (`npm run e2e` in `client/`). 92 Playwright tests in Chromium, against the real API and a production build:
+- **End-to-end** (`npm run e2e` in `client/`, after `npx playwright install chromium` once). 92 Playwright tests in Chromium, against the real API and a production build:
   - **Setup:** global setup starts an in-memory MongoDB (`emr_appointments_e2e`) and the API in test mode on port 5100, which never reads `server/.env`. It seeds a clinic through the API and serves the app on port 4173. No `.env` and no database of your own are needed.
   - **Coverage:** auth, RBAC, the scheduler, booking, double booking in two windows, live updates, the list, row actions, staff and schedules (including two admins saving one schedule), three screen widths, axe-core (WCAG 2.2 AA) on every page and dialog, keyboard focus, and render counts.
   - **Guard:** every test fails on a console error, an uncaught exception, a failed request or an unexpected error response.
