@@ -1,4 +1,4 @@
-import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery } from '@tanstack/react-query';
 
 import { searchPatients } from '@/features/patients/api';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -14,7 +14,8 @@ export const patientKeys = {
 
 /**
  * Search as you type: the request waits until typing pauses for 300 ms, and runs from two
- * characters on. The previous results stay on screen while the next ones load.
+ * characters on. The previous results stay on screen while the next ones load, but not once
+ * the term is too short to search: then there are no results to show.
  */
 export const usePatientSearch = (input: string) => {
   const term = useDebouncedValue(input.trim(), SEARCH_DELAY_MS);
@@ -24,7 +25,7 @@ export const usePatientSearch = (input: string) => {
     queryKey: patientKeys.search(term),
     queryFn: searching ? ({ signal }) => searchPatients(term, signal) : skipToken,
     staleTime: STALE_TIME.default,
-    placeholderData: keepPreviousData,
+    placeholderData: (previous) => (searching ? previous : undefined),
   });
 
   return {

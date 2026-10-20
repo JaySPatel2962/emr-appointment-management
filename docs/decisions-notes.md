@@ -367,6 +367,7 @@ Every index exists because a query needs it, since each extra index slows writes
   - Queries that depend on a choice not yet made use `skipToken`, which keeps their types sound without `!`.
   - A doctor already loaded in a list shows straight away (`placeholderData`) while their detail loads.
   - Paging, filtering and patient search keep the previous results on screen while the next ones load (`keepPreviousData`), so nothing jumps.
+  - Patient search keeps them only while a search runs. Manual QA found the last results still listed, and selectable, after the box was emptied or cut back to one character.
 - **One function updates the cache after a change: `syncAppointment()`.** It runs both on a mutation's response and on a Socket.IO event, and running it twice for the same change is harmless.
   - It updates the doctor's slot grid for that day slot by slot. Only the changed slot gets a new object, so only its tile re-renders.
   - It updates the day lists behind the scheduler and the dashboard.
