@@ -10,7 +10,8 @@ import {
   slotTimes,
   toast,
 } from './support/app';
-import { clinicToday, nextDateOn } from './support/dates';
+import { book, cancel } from './support/api';
+import { addDays, clinicToday, nextDateOn } from './support/dates';
 import { seedInfo } from './support/env';
 import { apiAs, expect, test } from './support/fixtures';
 import { ADMIN, RECEPTIONIST } from './support/seed-data';
@@ -167,6 +168,62 @@ test.describe('Editing a schedule', () => {
     expect(monday2).toContain('14:00');
     expect(monday2).not.toContain('13:00');
     await expect(pageHeading(page, 'Scheduler')).toBeVisible();
+  });
+
+  // Found in manual QA: a change of slot length kept a booking that no longer fit, which then
+  // vanished from the day sheet while its time could be booked again.
+  test('refuses a change that would strand a booking, and saves once it is cancelled', async ({
+    page,
+    guard,
+  }) => {
+    const { departments, patients } = seedInfo();
+    const admin = await apiAs(ADMIN);
+    const created = await admin.post<{ id: string }>('/doctors', {
+      name: 'Dr. Ishaan Bose',
+      email: `ishaan.bose.${Date.now()}@clinic.example`,
+      password: PASSWORD,
+      departmentId: departments.Orthopedics,
+      specialization: 'Spine',
+      slotDurationMinutes: 30,
+      schedule: [1, 2, 3, 4, 5].map((dayOfWeek) => ({
+        dayOfWeek,
+        sessions: [{ start: '09:00', end: '13:00' }],
+        breaks: [],
+      })),
+    });
+    const day = nextDateOn(addDays(clinicToday(), 1), [1, 2, 3, 4, 5]);
+    const booked = await book(admin, {
+      doctorId: created.id,
+      date: day,
+      slotStart: '12:30',
+      purpose: 'Back pain',
+      patientId: patients.lakshmi.id,
+    });
+
+    guard.expectResponse(409, /\/schedule$/);
+    await openAs(page, ADMIN, `/admin?tab=schedules&doctor=${created.id}`);
+    await expect(page.getByRole('heading', { name: "Dr. Ishaan Bose's schedule" })).toBeVisible();
+    await page.getByLabel('Slot length').selectOption('20');
+    const save = page.getByRole('button', { name: 'Save schedule' });
+    await save.click();
+    const refusal = page
+      .getByRole('alert')
+      .filter({ hasText: 'Not saved: 1 booked appointment would lose its slot' });
+    await expect(refusal).toContainText('12:30–13:00');
+    await expect(refusal).toContainText('Lakshmi Menon');
+    expect(
+      (await admin.get<{ slotDurationMinutes: number }>(`/doctors/${created.id}`))
+        .slotDurationMinutes,
+    ).toBe(30);
+
+    await cancel(admin, booked.id);
+    await save.click();
+    await expect(toast(page, 'Schedule saved for Dr. Ishaan Bose')).toBeVisible();
+    await expect(refusal).toBeHidden();
+    expect(
+      (await admin.get<{ slotDurationMinutes: number }>(`/doctors/${created.id}`))
+        .slotDurationMinutes,
+    ).toBe(20);
   });
 });
 

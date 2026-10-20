@@ -12,6 +12,7 @@ interface ApiErrorOptions {
   status: number;
   fieldErrors?: readonly FieldError[];
   requestId?: string | null;
+  meta?: Readonly<Record<string, unknown>>;
 }
 
 /** A failed request as the app sees it: a status, a message to show, and any field problems. */
@@ -24,11 +25,18 @@ export class ApiError extends Error {
   /** The server's X-Request-Id, which support can trace in the logs. */
   readonly requestId: string | null;
 
-  constructor(message: string, { status, fieldErrors = [], requestId = null }: ApiErrorOptions) {
+  /** The response's meta, for structured detail a feature knows how to read. */
+  readonly meta: Readonly<Record<string, unknown>>;
+
+  constructor(
+    message: string,
+    { status, fieldErrors = [], requestId = null, meta = {} }: ApiErrorOptions,
+  ) {
     super(message);
     this.status = status;
     this.fieldErrors = fieldErrors;
     this.requestId = requestId;
+    this.meta = meta;
   }
 
   get isNetworkError(): boolean {
@@ -74,6 +82,7 @@ export const toApiError = (error: unknown): ApiError => {
     status: response.status,
     fieldErrors: readFieldErrors(meta.errors),
     requestId,
+    meta,
   });
 };
 

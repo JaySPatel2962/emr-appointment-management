@@ -12,6 +12,8 @@ export interface HttpError {
   statusCode: number;
   message: string;
   details?: ErrorDetail[];
+  /** Extra structured detail for the response's meta. */
+  meta?: Record<string, unknown>;
   /** True for errors nobody anticipated: they are logged, and their real message is hidden. */
   unexpected: boolean;
 }
@@ -52,7 +54,10 @@ const expectedError = (
 
 export const toHttpError = (error: unknown): HttpError => {
   if (error instanceof AppError) {
-    return expectedError(error.statusCode, error.message, error.details);
+    return {
+      ...expectedError(error.statusCode, error.message, error.details),
+      ...(error.meta ? { meta: error.meta } : {}),
+    };
   }
   if (error instanceof ZodError) {
     const details = error.issues.map((issue) => ({

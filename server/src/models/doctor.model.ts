@@ -60,6 +60,8 @@ const doctorSchema = new Schema(
         message: (props: { value: DaySchedule[] }) => describeScheduleProblems(props.value),
       },
     },
+    // Counts schedule changes, so a change can be undone only if no other change came after it.
+    scheduleVersion: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

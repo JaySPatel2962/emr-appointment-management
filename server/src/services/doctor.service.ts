@@ -8,6 +8,10 @@ import { DoctorModel } from '#app/models/doctor.model.js';
 import type { Doctor } from '#app/models/doctor.model.js';
 import { recordAudit } from '#app/services/audit.service.js';
 import { getDepartmentsById, toDepartmentDto } from '#app/services/department.service.js';
+import {
+  findStrandedAppointments,
+  strandedAppointmentsError,
+} from '#app/services/schedule-fit.service.js';
 import type { DepartmentDto } from '#app/services/department.service.js';
 import { buildStaffAccount } from '#app/services/user.service.js';
 import type { AuthUser } from '#app/types/auth.js';
@@ -156,14 +160,33 @@ export const createDoctor = async (
 };
 
 /**
- * Replaces a doctor's weekly schedule and, optionally, the slot length. Appointments that were
- * already booked are kept even if they no longer fit the new schedule.
+ * Replaces a doctor's weekly schedule and, optionally, the slot length. A change that would
+ * leave an appointment still to happen (SCHEDULED or ARRIVED, dated today or later) without a
+ * slot of the same date, start and end is refused with a 409 that lists those appointments.
+ *
+ * A booking racing this change was checked against the old schedule, so the check runs again
+ * once the new one is saved. Each side writes before it reads (the booking re-checks its slot
+ * after saving, see createAppointment), so of a booking and a change made at the same moment at
+ * least one sees the other, and the stranding one is undone.
  */
 export const updateSchedule = async (
   id: string,
   input: UpdateScheduleInput,
   actor: AuthUser,
 ): Promise<DoctorDto> => {
+  const current = await DoctorModel.findById(id, {
+    schedule: 1,
+    slotDurationMinutes: 1,
+  }).lean();
+  if (!current) {
+    throw AppError.notFound(DOCTOR_NOT_FOUND);
+  }
+  const slotDurationMinutes = input.slotDurationMinutes ?? current.slotDurationMinutes;
+  const stranded = await findStrandedAppointments(current._id, input.schedule, slotDurationMinutes);
+  if (stranded.length > 0) {
+    throw strandedAppointmentsError(stranded);
+  }
+
   const changes = {
     schedule: input.schedule,
     ...(input.slotDurationMinutes === undefined
@@ -172,11 +195,28 @@ export const updateSchedule = async (
   };
   const doctor = await DoctorModel.findByIdAndUpdate(
     id,
-    { $set: changes },
+    { $set: changes, $inc: { scheduleVersion: 1 } },
     { returnDocument: 'after', runValidators: true },
   ).lean();
   if (!doctor) {
     throw AppError.notFound(DOCTOR_NOT_FOUND);
+  }
+
+  const late = await findStrandedAppointments(
+    doctor._id,
+    doctor.schedule,
+    doctor.slotDurationMinutes,
+  );
+  if (late.length > 0) {
+    // Put the previous schedule back, unless another change has replaced this one since.
+    await DoctorModel.updateOne(
+      { _id: doctor._id, scheduleVersion: doctor.scheduleVersion },
+      {
+        $set: { schedule: current.schedule, slotDurationMinutes: current.slotDurationMinutes },
+        $inc: { scheduleVersion: 1 },
+      },
+    );
+    throw strandedAppointmentsError(late);
   }
 
   await recordAudit({

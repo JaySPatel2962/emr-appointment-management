@@ -11,7 +11,7 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, req, res, next
     return;
   }
 
-  const { statusCode, message, details, unexpected } = toHttpError(error);
+  const { statusCode, message, details, meta, unexpected } = toHttpError(error);
   if (unexpected) {
     // The request logger writes it once, together with the request id, method and path.
     res.err = error instanceof Error ? error : new Error(String(error));
@@ -29,6 +29,7 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, req, res, next
     data: null,
     meta: {
       requestId: req.id,
+      ...meta,
       ...(details ? { errors: details } : {}),
       ...(stack ? { stack } : {}),
     },

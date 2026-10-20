@@ -944,7 +944,7 @@ curl "$BASE_URL/doctors/6ad4b1a4c42b65083c36c4e6" \
 
 ### PUT /doctors/:id/schedule
 
-Replaces a doctor's whole weekly schedule and, optionally, the slot length. Existing appointments are kept even if they no longer fit the new schedule.
+Replaces a doctor's whole weekly schedule and, optionally, the slot length. A change that would leave a booked appointment without its slot is refused with `409`, listing those appointments. Here, "without its slot" means that no slot in the new grid has the appointment's date, start **and** end. Only appointments still to happen count: SCHEDULED or ARRIVED, dated today or later. Completed, cancelled and earlier appointments never block a change.
 
 - **Roles:** SUPER_ADMIN
 - **Headers:** `Authorization: Bearer <accessToken>`, `Content-Type: application/json`
@@ -1047,9 +1047,35 @@ curl -X PUT "$BASE_URL/doctors/6ad4b1a4c42b65083c36c4e6/schedule" \
 | 401 | `Authentication required` | No valid access token |
 | 403 | `You do not have permission to perform this action` | The caller is not a SUPER_ADMIN |
 | 404 | `Doctor not found` | No doctor with this id |
+| 409 | `This schedule would leave <n> booked appointment(s) without their slot(s)` | The new grid has no slot with the same date, start and end for a SCHEDULED or ARRIVED appointment dated today or later. `meta.appointments` lists them. Nothing is saved. |
+
+A change saved at the same moment as a booking for a slot it removes is caught too. The change re-checks the appointments once saved, and puts the previous schedule back if a booking it missed would be stranded. The booking re-checks its slot once saved, and is undone with `422` if the slot is gone.
 
 <details>
 <summary>Example error responses</summary>
+
+`409 Conflict`
+
+```json
+{
+  "success": false,
+  "message": "This schedule would leave 1 booked appointment without its slot",
+  "data": null,
+  "meta": {
+    "requestId": "5b0d6e57-2a3c-4b5f-9d1e-7f0a4c2b8e11",
+    "appointments": [
+      {
+        "id": "6ad52b9e5099159b77ebd84e",
+        "date": "2026-10-23",
+        "slotStart": "10:30",
+        "slotEnd": "11:00",
+        "status": "SCHEDULED",
+        "patient": { "id": "6ad52b9e5099159b77ebd84f", "patientCode": "PAT-000025", "name": "Pooja Nair" }
+      }
+    ]
+  }
+}
+```
 
 `400 Bad Request`
 
@@ -1519,6 +1545,7 @@ curl -X POST "$BASE_URL/appointments" \
 | 409 | `Slot already booked` | Another active appointment holds this doctor, date and start time (see [section 6](#6-concurrency)) |
 | 422 | `This time is not a slot in the doctor's schedule` | `slotStart` is not the start of a slot that day: the doctor's day off, a break, outside working hours, or off the slot grid |
 | 422 | `This slot is in the past` | The slot has already started in the clinic's timezone |
+| 422 | `This time is not a slot in the doctor's schedule` | Also when a schedule change saved during this booking removed the slot. The booking is then undone, along with a patient it registered. |
 | 422 | `The doctor does not belong to this department` | `departmentId` is not the doctor's department |
 
 <details>
@@ -2496,7 +2523,7 @@ Slots are never stored. Every `GET /slots` request, and every booking, computes 
 - **BOOKED wins over PAST.** A booked slot that has started keeps its `appointmentId`, so a late arrival can still be marked.
 - **Cancelled appointments don't hold slots.** The slot becomes `AVAILABLE` again.
 - **Booking uses the same rules.** `POST /appointments` accepts only a `slotStart` that is the start of one of these slots, and only before it starts. Otherwise it answers `422`.
-- **Schedule changes don't move appointments.** If `PUT /doctors/:id/schedule` removes a booked slot, the appointment stays and is still listed by `GET /appointments`, but it no longer appears in the grid.
+- **A schedule change can't strand a booking.** `PUT /doctors/:id/schedule` is refused (`409`) if any SCHEDULED or ARRIVED appointment dated today or later would lose its slot: no slot of the new grid with the same date, start and end. Cancel or rebook those first. Completed, cancelled and earlier appointments don't count. So every active appointment always appears in the grid, and a time already booked is never offered again under a different slot length.
 
 ### The clinic timezone
 
@@ -2829,7 +2856,7 @@ interface ClientToServerEvents {
 | 401 | Not authenticated | `Authentication required`, `Invalid token`, `Token has expired`, `Invalid email or password`, `Refresh token missing`, `Your session has expired, please log in again` |
 | 403 | Authenticated, but the role or doctor scope doesn't allow it; or a cookie endpoint called from another site | `You do not have permission to perform this action`, `Doctors can only update consultation notes`, `Doctors can only view their own slots`, `Cross-site requests are not allowed` |
 | 404 | Not found, or outside a doctor's scope | `Doctor not found`, `Doctor not found in this department`, `Patient not found`, `Appointment not found`, `Route not found: <METHOD> <path>` |
-| 409 | Conflicts with the current state | `Slot already booked`, `This appointment is <status> and cannot be <action>`, `A record with the same email already exists` |
+| 409 | Conflicts with the current state | `Slot already booked`, `This appointment is <status> and cannot be <action>`, `A record with the same email already exists`, `This schedule would leave <n> booked appointment(s) without their slot(s)` (with `meta.appointments`) |
 | 413 | The body is larger than `BODY_LIMIT` (default 100 KB) | `Request body is too large` |
 | 422 | Valid input that breaks a scheduling rule | `This time is not a slot in the doctor's schedule`, `This slot is in the past`, `The doctor does not belong to this department`, `Department not found`, `Slots cannot be shown for a past date` |
 | 429 | Rate limit reached | `Too many requests, please try again later` |

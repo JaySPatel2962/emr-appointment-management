@@ -136,7 +136,7 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Duplicate emails are caught by the unique index** (409), not by looking first, so two simultaneous requests can't both create the same login.
 - **Doctor scoping lives in the service.** For a doctor, `listDoctors` and `getDoctor` add the doctor's own id to the query. Another doctor's profile answers 404, not 403, so the ids of other profiles aren't confirmed.
 - **No N+1 queries:** the departments for a whole page of doctors are loaded in one `$in` query.
-- **Schedules are checked by the same rules twice.** zod returns a 400 with the exact field path of each problem, and the Mongoose validator (run on updates with `runValidators`) protects every other write path. When a schedule changes, already booked appointments are kept; flagging the ones that no longer fit is a future improvement.
+- **Schedules are checked by the same rules twice.** zod returns a 400 with the exact field path of each problem, and the Mongoose validator (run on updates with `runValidators`) protects every other write path. A schedule change that would strand a booked appointment is refused (see Phase 5).
 - **Doctor search** is a case-insensitive "contains" on name and specialization. It can't use an index, which is fine at the size of a doctor list. User input is escaped before it becomes a regex, so it can't inject patterns.
 - **Validators define the input types.** Services take `z.output<typeof schema>` types, so the shape of a request and the code that uses it can't drift apart.
 - **Middleware order on every route:** authenticate, then authorize, then validate. Callers without access get 401 or 403 and never see validation details.
@@ -151,7 +151,10 @@ Every index exists because a query needs it, since each extra index slows writes
 - **BOOKED wins over PAST.** A booked slot keeps its appointment id even after it starts, so a receptionist can still mark a late arrival.
 - **Booking reuses the generator** (`resolveBookableSlot`), so the API can never book a time that the slot grid wouldn't offer: not in a break, not on a day off, not off the grid, not in the past.
 - **A doctor asking for another doctor's slots gets 403, not 404.** A slot grid holds no private record, and a clear answer lets the frontend explain why. Records such as profiles and appointments answer 404 instead, so their ids aren't confirmed.
-- **Known limitation:** if a schedule changes after appointments were booked, an appointment outside the new schedule no longer appears in the slot grid. It is still in the appointment list.
+- **Schedule changes can't strand a booking** (added after manual QA). A change is refused with 409 if any SCHEDULED or ARRIVED appointment dated today or later would lose its slot, that is, no slot of the new grid with the same date, start and end. The 409 lists those appointments, and the editor shows them with links to the list. Before this, a changed slot length hid booked appointments from the grid, and offered their times again, so a doctor could be booked twice at once.
+  - Same start **and** end, because a 10:30-10:45 booking doesn't fit a 10:30-11:00 slot of a 30-minute grid.
+  - Completed, cancelled and earlier appointments don't block a change: nothing more happens to them.
+  - **A booking and a change at the same moment.** Each side writes, then reads. The change re-checks the appointments once saved, and if a booking it missed is stranded, it puts the previous schedule back (a `scheduleVersion` counter stops it overwriting a later change) and answers 409. The booking re-checks its slot once saved, and if the slot is gone, it deletes itself (and a patient it registered) and answers 422. Whatever the order, one of them sees the other. Both re-checks are tested by replaying the race.
 
 ## Phase 6: Appointments and patients
 
@@ -593,7 +596,6 @@ Made without a specific instruction. Each is a small change if the clinic wants 
 
 ## Known limitations and next steps
 
-- Appointments booked before a schedule change stay valid even if they no longer fit. They should be flagged for review.
 - The patient and doctor names copied onto appointments are not re-synced. No flows edit them yet.
 - A deactivated user keeps API access until their access token expires, within 15 minutes.
 - Audit writes are best effort. An outbox, or writing in the same transaction, would guarantee them.

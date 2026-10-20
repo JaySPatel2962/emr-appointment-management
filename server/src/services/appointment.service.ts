@@ -18,7 +18,12 @@ import {
   toPatientDto,
 } from '#app/services/patient.service.js';
 import type { PatientDto, PatientRecord } from '#app/services/patient.service.js';
-import { findSchedulingDoctor, resolveBookableSlot } from '#app/services/slot.service.js';
+import {
+  findSchedulingDoctor,
+  isSlotStillOffered,
+  resolveBookableSlot,
+  SLOT_NOT_IN_SCHEDULE,
+} from '#app/services/slot.service.js';
 import type { AuthUser } from '#app/types/auth.js';
 import { isDoctor, requireDoctorId } from '#app/utils/access.js';
 import { AppError } from '#app/utils/app-error.js';
@@ -246,6 +251,17 @@ export const createAppointment = async (
       throw AppError.conflict(SLOT_TAKEN);
     }
     throw error;
+  }
+
+  // The slot was checked against the schedule read before the insert. A schedule change saved
+  // since then may have removed it (see updateSchedule), so check again now the booking is
+  // saved, and undo it rather than leave it stranded. Nothing was announced or audited yet.
+  if (!(await isSlotStillOffered(doctor._id, input.date, slot))) {
+    await AppointmentModel.deleteOne({ _id: booking.appointment._id });
+    if (booking.newPatient) {
+      await PatientModel.deleteOne({ _id: booking.newPatient._id });
+    }
+    throw AppError.unprocessable(SLOT_NOT_IN_SCHEDULE);
   }
 
   if (booking.newPatient) {

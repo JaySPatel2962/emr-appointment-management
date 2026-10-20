@@ -103,6 +103,8 @@ export const generateSlots = (
     .flatMap((range) => cutIntoSlots(range, slotDurationMinutes));
 };
 
+export const SLOT_NOT_IN_SCHEDULE = "This time is not a slot in the doctor's schedule";
+
 /** A slot is past once the clinic clock reaches its start: it can no longer be booked. */
 export const isPastSlot = (date: string, slot: Slot, now: ClinicMoment): boolean =>
   date < now.date || (date === now.date && timeToMinutes(slot.start) <= now.minutes);
@@ -133,12 +135,33 @@ export const resolveBookableSlot = (
     (candidate) => candidate.start === slotStart,
   );
   if (!slot) {
-    throw AppError.unprocessable("This time is not a slot in the doctor's schedule");
+    throw AppError.unprocessable(SLOT_NOT_IN_SCHEDULE);
   }
   if (isPastSlot(date, slot, clinicNow())) {
     throw AppError.unprocessable('This slot is in the past');
   }
   return slot;
+};
+
+/**
+ * Whether the doctor's schedule, read now, still offers exactly this slot. A booking checks it
+ * after it is saved: a schedule change saved in the meantime may have removed the slot.
+ */
+export const isSlotStillOffered = async (
+  doctorId: Types.ObjectId,
+  date: string,
+  slot: Slot,
+): Promise<boolean> => {
+  const doctor = await DoctorModel.findById(doctorId, {
+    schedule: 1,
+    slotDurationMinutes: 1,
+  }).lean();
+  return (
+    doctor !== null &&
+    generateSlots(doctor.schedule, date, doctor.slotDurationMinutes).some(
+      (candidate) => candidate.start === slot.start && candidate.end === slot.end,
+    )
+  );
 };
 
 export const getDoctorDaySlots = async (

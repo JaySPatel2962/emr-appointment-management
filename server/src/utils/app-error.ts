@@ -5,16 +5,27 @@ export interface ErrorDetail {
   message: string;
 }
 
-/** An expected failure with an HTTP status. Its message is safe to send to the client. */
+/**
+ * An expected failure with an HTTP status. Its message is safe to send to the client, and so is
+ * `meta`: extra structured detail that goes into the response's meta, such as the appointments
+ * that block a schedule change.
+ */
 export class AppError extends Error {
   readonly statusCode: number;
   readonly details: ErrorDetail[] | undefined;
+  readonly meta: Record<string, unknown> | undefined;
 
-  constructor(statusCode: number, message: string, details?: ErrorDetail[]) {
+  constructor(
+    statusCode: number,
+    message: string,
+    details?: ErrorDetail[],
+    meta?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'AppError';
     this.statusCode = statusCode;
     this.details = details;
+    this.meta = meta;
   }
 
   static badRequest(message: string, details?: ErrorDetail[]): AppError {
@@ -33,8 +44,8 @@ export class AppError extends Error {
     return new AppError(HTTP_STATUS.NOT_FOUND, message);
   }
 
-  static conflict(message: string): AppError {
-    return new AppError(HTTP_STATUS.CONFLICT, message);
+  static conflict(message: string, meta?: Record<string, unknown>): AppError {
+    return new AppError(HTTP_STATUS.CONFLICT, message, undefined, meta);
   }
 
   static unprocessable(message: string, details?: ErrorDetail[]): AppError {

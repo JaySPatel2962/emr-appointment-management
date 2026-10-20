@@ -85,6 +85,7 @@ erDiagram
         string specialization
         number slotDurationMinutes
         DaySchedule[] schedule "embedded"
+        number scheduleVersion
         date createdAt
         date updatedAt
     }
@@ -213,6 +214,7 @@ Mongoose also adds a version key, `__v`, to every collection except `counters`. 
 | `schedule[].dayOfWeek` | Number | yes | 0 = Sunday to 6 = Saturday. Each day appears at most once. |
 | `schedule[].sessions` | Array of `{ start, end }` | no | Working hours as `"HH:mm"`. At least one per listed day, none overlapping. |
 | `schedule[].breaks` | Array of `{ start, end }` | no | Must fall within that day's working hours, and may not overlap each other |
+| `scheduleVersion` | Number | no | Default 0. Goes up by one with every schedule change, so a change can be undone only if nothing replaced it since (see below). |
 | `createdAt`, `updatedAt` | Date | auto | Timestamps |
 
 The embedded day and time-range objects have no `_id` of their own (`_id: false`). The schedule rules:
@@ -416,6 +418,7 @@ MongoDB lets you either **reference** another document (store its `_id`) or **em
 - It is small and bounded: at most 7 days, each with a few sessions and breaks.
 - It is replaced as a whole (`PUT /doctors/:id/schedule`), never edited one entry at a time.
 - It is validated as a whole: the rules compare a day's sessions with its breaks.
+- **It can't strand a booking.** A change is refused if a SCHEDULED or ARRIVED appointment dated today or later would lose its slot: no slot of the new grid with the same date, start and end. The check is one query on `{ doctorId, date }`, then slot generation per date. A booking saved in the same moment is caught by a second check after the change is saved. If a booking it missed would be stranded, the change is undone with a compare-and-set on `scheduleVersion`, so a later change is never overwritten. The booking itself re-checks its slot after saving.
 
 ### Why appointments copy patientName, patientMobile and doctorName
 
