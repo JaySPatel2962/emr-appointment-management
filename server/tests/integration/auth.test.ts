@@ -129,10 +129,13 @@ describe('POST /api/v1/auth/refresh', () => {
     const reuse = await request(app).post(REFRESH_URL).set('Cookie', original);
 
     expect(reuse.status).toBe(401);
+    // The entry names the user and their role, like every other entry (found in manual QA).
     expect(
       await AuditLogModel.countDocuments({
         action: AUDIT_ACTIONS.REFRESH_TOKEN_REUSE,
         entityId: user._id,
+        userId: user._id,
+        role: ROLES.SUPER_ADMIN,
       }),
     ).toBe(1);
     // The newer token dies too, so whoever copied the old one is locked out along with the user.
@@ -158,6 +161,13 @@ describe('POST /api/v1/auth/logout', () => {
     expect(res.status).toBe(200);
     expect(setCookieLine(res, REFRESH_COOKIE_NAME)).toMatch(/Expires=Thu, 01 Jan 1970/);
     expect(refreshAfterLogout.status).toBe(401);
+    expect(
+      await AuditLogModel.countDocuments({
+        action: AUDIT_ACTIONS.LOGOUT,
+        userId: user._id,
+        role: ROLES.RECEPTIONIST,
+      }),
+    ).toBe(1);
   });
 
   it("accepts the app's own origin", async () => {

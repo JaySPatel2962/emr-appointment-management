@@ -127,7 +127,7 @@ Every index exists because a query needs it, since each extra index slows writes
   - An unknown email still runs a bcrypt comparison against a dummy hash, so response time doesn't reveal which emails exist.
   - Only failed logins count toward the login rate limit.
 - **Passwords** use bcrypt with a configurable cost (12 by default; at least 10 is enforced in production). New passwords need 8 to 72 characters, including a letter and a number. 72 is bcrypt's limit, so longer passwords are refused rather than silently cut.
-- **Audit entries** record successful and failed logins, logouts and token reuse, with IP and user agent. Audit writes are best effort: a failed write is logged as an error but never fails the user's action. A stricter design would write the entry in the same transaction, or through an outbox.
+- **Audit entries** record successful and failed logins, logouts and token reuse, with IP and user agent. Each entry names the user and their role. The one exception is a failed login with an unknown email, which has no user. Logout and token-reuse entries look the role up, since a refresh token records only the user id; manual QA found them without it. Audit writes are best effort: a failed write is logged as an error but never fails the user's action. A stricter design would write the entry in the same transaction, or through an outbox.
 - **The seed script** creates the departments and the first Super Admin from env vars. It can run any number of times and never changes an existing admin's password. `npm run secrets` fills in the JWT secrets in `.env` without printing them.
 
 ## Phase 4: Users, doctors and departments

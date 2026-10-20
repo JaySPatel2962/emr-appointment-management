@@ -10,7 +10,7 @@ export interface AuditEntry {
   action: AuditAction;
   entity: AuditEntity;
   entityId?: Types.ObjectId | string;
-  /** Who acted. The role is left out when it isn't known, e.g. for a token reuse. */
+  /** Who acted. The role is left out only when the user no longer exists. */
   actor?: { id: string; role?: Role };
   /** Context such as the client IP or the names of changed fields. Never secrets or clinical text. */
   metadata?: Record<string, unknown>;

@@ -126,6 +126,12 @@ export const login = async (
   return buildSession(user, authUser, refreshToken);
 };
 
+/** A user as an audit actor, with their role (a refresh token records only the user id). */
+const auditActor = async (userId: Types.ObjectId): Promise<{ id: string; role?: Role }> => {
+  const user = await UserModel.findById(userId, { role: 1 }).lean();
+  return { id: userId.toString(), ...(user ? { role: user.role } : {}) };
+};
+
 // A revoked token coming back means it was copied: end every session of that user.
 const revokeAllSessions = async (userId: Types.ObjectId, client: ClientInfo): Promise<void> => {
   await RefreshTokenModel.updateMany(
@@ -136,7 +142,7 @@ const revokeAllSessions = async (userId: Types.ObjectId, client: ClientInfo): Pr
     action: AUDIT_ACTIONS.REFRESH_TOKEN_REUSE,
     entity: AUDIT_ENTITIES.USER,
     entityId: userId,
-    actor: { id: userId.toString() },
+    actor: await auditActor(userId),
     metadata: { ...client },
   });
 };
@@ -199,7 +205,7 @@ export const logout = async (
       action: AUDIT_ACTIONS.LOGOUT,
       entity: AUDIT_ENTITIES.USER,
       entityId: revoked.userId,
-      actor: { id: revoked.userId.toString() },
+      actor: await auditActor(revoked.userId),
       metadata: { ...client },
     });
   }
