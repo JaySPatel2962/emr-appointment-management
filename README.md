@@ -3,9 +3,9 @@
 Appointment management module for an enterprise EMR system. It covers role-based access (Super Admin, Receptionist, Doctor), doctor schedules, dynamically generated slots, booking that is safe against double booking, and real-time scheduler updates.
 
 > **Status:**
-> - The backend (`server/`) is complete and tested: 184 tests, about 93% line coverage.
-> - The frontend (`client/`) is complete: login, dashboard, scheduler, booking, appointment list, and staff and schedules. 102 unit and component tests cover its logic, and 82 Playwright end-to-end tests run it against the real API.
-> - A manual end-to-end QA pass, run like real clinic use against a real MongoDB, is written up in [`docs/MANUAL_TEST_REPORT.md`](docs/MANUAL_TEST_REPORT.md). It found nine bugs, all fixed, and lists the questions still open.
+> - The backend (`server/`) is complete and tested: 215 tests, about 93% line coverage.
+> - The frontend (`client/`) is complete: login, dashboard, scheduler, booking, appointment list, and staff and schedules. 110 unit and component tests cover its logic, and 91 Playwright end-to-end tests run it against the real API.
+> - A manual end-to-end QA pass, run like real clinic use against a real MongoDB, is written up in [`docs/MANUAL_TEST_REPORT.md`](docs/MANUAL_TEST_REPORT.md). It found twelve bugs, nine in the first pass and three in a retest of later changes, and all are fixed. Of its first seven questions, four were resolved by changes and three are kept and listed under [Assumptions](#assumptions) and [Known limitations](#known-limitations); two new ones are open.
 > - Design decisions are recorded in [`docs/decisions-notes.md`](docs/decisions-notes.md).
 
 ## Tech stack
@@ -375,7 +375,7 @@ Server modules import each other through the `#app/*` alias (for example `#app/c
 
 ## Assumptions
 
-Where the brief left room for interpretation, this build assumes the following. The questions behind them are in [`docs/MANUAL_TEST_REPORT.md`](docs/MANUAL_TEST_REPORT.md) (Q-01 to Q-07).
+Where the brief left room for interpretation, this build assumes the following. The questions behind them are in [`docs/MANUAL_TEST_REPORT.md`](docs/MANUAL_TEST_REPORT.md) (Q-01 to Q-09).
 
 - **A doctor may have no working days (Q-01).** An empty week (`schedule: []`) is accepted when a doctor is created and when a schedule is edited, for a doctor who is on leave or whose hours aren't known yet. Such a doctor is listed but offers no slots on any day. The brief lists "no working days" among invalid schedules; this build reads it as "no bookable day", not as an error.
 - **Mobile numbers aren't unique (Q-02).** Families often share one phone, so two patients may have the same number. The new-patient form lists the patients already registered with a number ("Is it one of these?"), but never refuses to register.
@@ -387,3 +387,5 @@ Where the brief left room for interpretation, this build assumes the following. 
 - **No booking horizon (Q-04).** Any future day the doctor works can be booked, even years ahead (a slot in 2099 is accepted). A clinic that wants a limit would add a configurable horizon, such as 90 days, answered with 422.
 - **An empty week gives no warning (Q-01).** The schedule editor saves a week with every day switched off without asking first, and the doctor then has no slots until a day is added back.
 - **Operator-looking query parameters get 200, not 400 (Q-05).** `?search[$gt]=` or `?status[$ne]=CANCELLED` runs as if the parameter weren't there: nothing is injected, but nothing is refused either. Strict query schemas, which reject unknown parameters with 400, would be the change if a client needs to be told.
+- **Two admins saving one schedule at once: the later save wins (Q-08, open).** Each save replaces the whole week, so if two admins edit the same doctor from the same starting point, the first one's change is lost without a warning. The result is always a valid schedule that strands no booking. Sending the `scheduleVersion` the editor loaded, and refusing a stale one with 409, would close it.
+- **Searches sort their matches in memory (Q-09, open).** Every unfiltered list reads its order from an index. A search by name, mobile number or patient ID finds its rows through an index, then sorts those few matches in memory, because a prefix match on one index can't also give another field's order.

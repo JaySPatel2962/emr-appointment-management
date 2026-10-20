@@ -2,7 +2,12 @@
 
 An independent, manual QA pass over the EMR appointment module, against every requirement in [`ASSESSMENT.md`](ASSESSMENT.md). The point was to use the real app the way clinic staff would, over several days of bookings, and to try to break it. The existing Playwright suite was not used for this.
 
-- **When:** Monday 19 October 2026 from 01:40 IST (Groups A to I), and Tuesday 20 October (fixes, retests, the final runs). The scenarios with dates book across the following two weeks.
+- **When:**
+  - Monday 19 October 2026 from 01:40 IST: Groups A to I.
+  - Tuesday 20 October: the fixes, their retests and the final runs.
+  - Tuesday 20 October, 15:06 to about 16:45 IST: the [R2 retest](#r2-retest-after-the-q-01-to-q-07-changes) of the changes made for the open questions.
+
+  The scenarios with dates book across the following two weeks.
 - **App:** the API (`src/server.ts` through tsx, `NODE_ENV=development` as in `server/.env`) on `localhost:5000`. The client is a production build (`npm run build`, served by `vite preview`) on `localhost:5173`.
 - **Database:** the Atlas cluster from `server/.env`, in the database **`emr_manual_qa`**. Only the database name was changed, in memory, when each process started. No other database was read or written; the cluster's database names were listed once, before the first write. The test data is left in place.
 - **Browser:** Chromium 1.64 (Playwright), visible (`headless: false`, `slowMo` 250 ms for the UI groups, less for the measuring scripts), en-IN, timezone Asia/Kolkata unless a scenario says otherwise. It was driven by throwaway scripts in `qa/` (gitignored). Their output is quoted in the Actual column.
@@ -11,18 +16,25 @@ An independent, manual QA pass over the EMR appointment module, against every re
 
 ## Summary
 
-- **Scenarios:** 316 scripted scenarios (each a step with an expected result and a recorded outcome), plus about 10 ad-hoc reruns. They are grouped below as rows; a row can hold several checks, for example G-03's 25 filters.
+- **Scenarios:**
+  - First pass: 316 scripted scenarios (each a step with an expected result and a recorded outcome), plus about 10 ad-hoc reruns.
+  - R2 retest: 137 scripted checks. On their final runs, 136 pass and 1 is INFO (patient-code gaps). The first runs had 5 failures caused by mistakes in my scripts (test data, an expectation, a locator), each rerun once corrected, and found the 3 new bugs below.
+
+  They are grouped below as rows; a row can hold several checks, for example G-03's 25 filters.
 - **Every requirement in `ASSESSMENT.md` was exercised:** authentication, RBAC, schedules, slots, the scheduler, booking, concurrency, the lifecycle, search with paging, the audit trail, real time, security, the database and the frontend's states. Each holds as specified, apart from the items under [Bugs](#bugs) and [Open questions](#open-questions).
-- **Bugs:** 9 found, **all fixed**, one `fix:` commit each, with a regression test that fails without the fix and a retest against the running app. The most serious:
+- **Bugs:** 12 found, **all fixed**: 9 in the first pass and 3 in the R2 retest (BUG-10 to BUG-12). Each has its own `fix:` commit, a regression test that fails without the fix, and a retest against the running app. The most serious:
   - any website could sign staff out (BUG-06)
   - a long patient name pushed the list's Arrived and Cancel buttons out of view at 1280 px (BUG-04)
   - an anonymous nested-JSON body produced a 500 (BUG-05)
   - offline, the app paused silently, and a booking would have sent itself later (BUG-09)
-- **Open questions:** 7 (Q-01 to Q-07), none changed. The weightiest is Q-07: after a schedule edit, a doctor can be booked twice for the same time.
+  - at 768 px the appointment list had no sort control at all (BUG-12)
+- **Open questions:**
+  - Q-01 to Q-07: **4 resolved** by changes (Q-02, Q-03, Q-06, Q-07) and **3 kept**, documented in the README's Assumptions and Known limitations (Q-01, Q-04, Q-05). Q-07, a doctor booked twice for the same time after a schedule edit, can no longer happen: R2-01 found 0 overlaps.
+  - The retest raised **2 new questions**: Q-08 (two admins saving one schedule at once) and Q-09 (filtered searches sort in memory).
 - **Not tested:** listed at the [end](#not-tested).
-- **Final runs after the fixes:** see [Final regression runs](#final-regression-runs).
+- **Final runs after all fixes:** see [Final regression runs](#final-regression-runs).
 
-**How to read the tables.** Result is PASS, FAIL (a bug, listed under [Bugs](#bugs)), INFO (behavior recorded without a pass/fail expectation) or QUESTION (ambiguous against the assessment, listed under [Open questions](#open-questions)). Evidence gives database ids or counts, read with read-only queries, and the screenshot in [`docs/manual-qa/`](manual-qa/).
+**How to read the tables.** Result is PASS, FAIL (a bug, listed under [Bugs](#bugs)), INFO (behavior recorded without a pass/fail expectation) or QUESTION (ambiguous against the assessment, listed under [Open questions](#open-questions)). Evidence gives database ids or counts, read with read-only queries, and the screenshot. Ten key screenshots are kept in [`docs/manual-qa/`](manual-qa/) (see [Screenshots](#screenshots)). The others named in the tables were taken during the run and are kept outside git, in the gitignored `qa/manual-qa-archive/` and `qa/shots-r2/`.
 
 ## Step 0: Pre-checks
 
@@ -338,9 +350,146 @@ The first run happened on Monday 19 Oct, the reruns (marked "rerun") on Tuesday 
 | I-09 | Console and network across Group I | Clean | No console error or warning, no failed request and no unexpected error response, apart from the declared ones: the offline errors in I-07, and the 401 of the silent refresh on the login page | PASS | |
 | I-10 | An open day sheet turns a free slot PAST when its time comes | No reload, no request | Dr. Iyer's day sheet was opened at 10:59 on Tue 20 Oct. The free 11:00 tile ("11:00 Available, book this slot") turned "11:00 Past" at 11:00:11 IST, lost its booking link, and no API request was sent meanwhile. The flip comes from the shared clinic-clock ticker. | PASS | `I-10-past-flip.png` |
 
+## R2: Retest after the Q-01 to Q-07 changes
+
+Run on Tuesday 20 Oct from 15:06 to about 16:45 IST, after the commits that answer Q-02, Q-03, Q-06 and Q-07. The setup was the same as above: the real API and a production build, a visible Chromium, and the Atlas database `emr_manual_qa`, where only the name was changed and the earlier test data was kept. New data was added through the UI. The QA API again ran with `RATE_LIMIT_MAX=100000`. The scripts are `qa/r2-*.mjs`, with their results in `qa/logs/r2-*-results.json` (gitignored). Before the run, `npm run indexes:sync` and `npm run backfill:name-words` were run against this database.
+
+Five checks failed on a first run because of mistakes in my scripts, not in the app:
+- wrong test data in three: R2-04a at both widths, and R2-05-BUG09
+- a wrong expectation in one: the `--` list filter in R2-03
+- a wrong locator in one: R2-06-D
+
+Each is named in its row, and each passed when rerun with the mistake corrected. The retest found three bugs in the app, BUG-10 to BUG-12. All three are fixed, and their rows show the first result and the rerun.
+
+### R2-01: Schedule edits (Q-07)
+
+Dr. Kabir Malhotra (`6ad737400e59a09eb585545d`) was created for this through the admin form: Orthopedics, 30-minute slots, and the standard week of Monday to Friday, 09:00–12:00 and 13:00–17:00. The front desk booked four visits through the scheduler:
+- **T:** today, Tue 20 Oct, 16:30–17:00, Meena Pillai, PAT-000024
+- **A:** Wed 21 Oct, 10:00–10:30, a new patient, Ritika Sen Gupta, PAT-000050
+- **B:** Thu 22 Oct, 11:00–11:30, Asha Rao, found by typing "rao asha"
+- **C:** Fri 23 Oct, 15:00–15:30, a new patient, Devendra Nath Mishra, PAT-000051
+
+| ID | Steps | Expected | Actual | Result | DB evidence |
+| --- | --- | --- | --- | --- | --- |
+| R2-01a | Editor: slot length 30 → 20, Save | Refused, with the 4 bookings listed in the editor, and the schedule unchanged | `409` "This schedule would leave 4 booked appointments without their slots". The editor listed T, A, B and C with day, time, patient and code, each linking to the list filtered to that doctor and day. **First run: the list appeared at the top of the editor, about 1,500 px above the Save button just pressed, so nothing visible happened (BUG-10).** Rerun after the fix: the list and the Save button were both fully in view, at 1280 px (y 601–720 of 800) and at 375 px (y 400–660 of 740). | FAIL (BUG-10), then PASS | Before and after each refusal: slot length 30, 5 days, `scheduleVersion` 0 → 0 |
+| R2-01b | Untick Friday, Save | Refused, listing C | `409`, listing only C (Fri 23 Oct 15:00–15:30, Devendra Nath Mishra, PAT-000051). Rerun after BUG-10: removing Monday listed E, in view at both widths. | FAIL (BUG-10), then PASS | Schedule unchanged |
+| R2-01c | Thursday: add a break 11:00–11:30 over B, Save | Refused, listing B | `409`, listing only B (Thu 22 Oct 11:00–11:30, Asha Rao, PAT-000001). Rerun after BUG-10: a break over Wed 09:20–09:40 listed D, in view at both widths. | FAIL (BUG-10), then PASS | Schedule unchanged |
+| R2-01d | The front desk cancels T, A, B and C from the appointment list | Cancelled | `DELETE` 200 four times | PASS | All four `CANCELLED`, each with `cancelledAt` |
+| R2-01e | Repeat: slot length 30 → 20 | Saved; cancelled bookings don't block | `200`, toast "Schedule saved for Dr. Kabir Malhotra" | PASS | Slot length 20, `scheduleVersion` 0 → 1 |
+| R2-01f | Repeat: untick Friday | Saved | `200` | PASS | Days 1–4, version 2 |
+| R2-01g | Repeat: the Thursday break 11:00–11:30 | Saved | `200` | PASS | Thursday breaks 12:00–13:00 and 11:00–11:30, version 3 |
+| R2-01h | New bookings on the 20-minute grid: D (Wed 21 Oct 09:20–09:40, Ritika, found by "Ritika") and E (Mon 26 Oct 14:00–14:20, Devendra, found by "mishra"). Then add Saturday 09:00–13:00 | An edit that still fits saves | `200` | PASS | Saturday `[{09:00, 13:00}]`, version 4 |
+| R2-01i | Extend Monday's afternoon from 13:00–17:00 to 13:00–18:00 | Saved | `200` | PASS | Monday 09:00–12:00 and 13:00–18:00, version 5 |
+| R2-01j | `GET /slots` for each active booking of this doctor | D and E still sit on their slots | Both slots are BOOKED with their `appointmentId` | PASS | 2 active bookings from today on, 0 off the grid |
+| R2-01k | Dr. Nisha Verma: untick Monday and save, then add Monday back through the editor with its two sessions and its break | Past and completed appointments don't block | Removing Monday: `200`. Putting it back: `200`, and Monday is identical to before. | PASS | Her Mondays hold 5 SCHEDULED appointments dated 19 Oct (the past) and 5 COMPLETED ones on 26 Oct, and nothing active ahead. While Monday was removed, her days were 2, 3, 4, 5, 6, 0. |
+| R2-01l | Two admin windows on Dr. Malhotra's editor. One sets Saturday to end at 14:00, the other Tuesday at 17:40, and both press Save at the same moment. | The final schedule is valid | Both `200`. The final week has Saturday ending at 14:00 and Tuesday at **17:00**: the later save replaced the whole week, and the other admin's change was lost without a word. | PASS (valid); QUESTION Q-08 | Version 5 → 7, 0 bookings off the grid |
+| R2-01m | 10 rounds through the API: an edit that fits and an edit that strands (slot length 30), sent at the same moment | The fitting edit saves and the stranding edit is refused, every time | The fitting edit got `200` in all 10 rounds and the stranding edit `409` in all 10 | PASS | Final slot length 20, 0 bookings off the grid |
+| R2-01n | 10 rounds: two different edits that both fit, sent at the same moment | Both save; the result is one or the other, never a mix | `200`/`200` in every round. The final week was exactly one of the two each time (A 6 times, B 4 times). | PASS | Version +20, 0 bookings off the grid |
+| R2-01o | 10 rounds: an edit that removes Wednesday afternoon races a booking of Wed 28 Oct 14:00 | Never both | Edit `409` and booking `422`: 5 rounds. Edit `200` and booking `422`: 2. Edit `409` and booking `201`: 3. Both succeeded: never. In 5 rounds both were refused, because each side's re-check saw the other's write and backed out (see the observations under Open questions). | PASS | 0 bookings off the grid afterwards |
+| R2-01p | The H-06 and H-07 queries after all of this | 0 and 0 | Duplicate active doctor, date and start: 0 groups. Overlapping active appointments: 0 pairs. | PASS | 132 appointments not cancelled |
+
+### R2-02: Indexes and sorting (Q-06)
+
+| ID | Steps | Expected | Actual | Result | DB evidence |
+| --- | --- | --- | --- | --- | --- |
+| R2-02a | `listIndexes` on every collection; `explain("executionStats")` on all 37 list and search shapes (`qa/explain-all.mjs`, written to `qa/logs/explain-r2.json`) | No COLLSCAN, and sorting uses an index | **COLLSCAN: 0 of 37.** All 12 unfiltered lists (the ten appointment sorts, the patient list, the doctor list) read their page straight from an index: LIMIT ← FETCH ← IXSCAN, 20 keys for 20 rows. Their totals come from `estimatedDocumentCount`, and filtered totals from COUNT_SCAN or IXSCAN. **10 filtered shapes sort in memory after an index scan,** with at most 34 documents: the appointment list's patient name ("asha", "rao asha"), mobile prefix, and status sorted by patient name; and patient search by code, mobile prefix, exact mobile, "asha", "rao" and "rao asha". | PASS on COLLSCAN; QUESTION Q-09 on sorting | appointments: `uniq_active_doctor_slot`, `doctorId_1_date_1`, `status_1_date_1`, `departmentId_1_date_1`, `patientMobile_1`, `date_1_slotStart_1__id_1`, `patientNameLower_1__id_1`, `createdAt_1__id_1`, `doctorName_1__id_1`, `status_1__id_1`, `patientNameWords_1`. patients: `patientCode_1`, `mobile_1`, `nameLower_1__id_1`, `nameWords_1`. doctors: `userId_1`, `departmentId_1_name_1`, `name_1`, `specialization_1`. |
+| R2-02b | The unfiltered list in the UI | The total shown is the real count | "Showing 1–20 of 163 appointments" | PASS | `meta.total` 163 (estimated), `countDocuments({})` 163 |
+| R2-02c | The list sorted by each of its five fields in both directions, at 1280 px and at 768 px, through the control on screen. Page 1 and the last page are compared with an independent sort of the raw documents. | The same order, and the total each time | **First run: at 768 px no sort control was on screen at all, and at 1280 px there was no way to sort by Booked (BUG-12).** After the fix: all 20 combinations PASS. At 1280 px the headers were used for four fields and the "Sort by" choice for Booked; at 768 px, the choice for all ten. Page 1 (20 rows) and page 9 (3 rows) matched the independent order, the rows on screen matched the API's order, and every summary said 163. | FAIL (BUG-12), then PASS | 163 appointments |
+
+### R2-03: Word search (Q-03)
+
+Set-up (R2-03-setup, PASS): a new patient, "Anaïs Fernandes-Rao" (PAT-000052), was registered through the booking form. Stored `nameWords`: `["anais", "fernandes", "rao"]`.
+
+Each term was typed into the booking form's "Find the patient" box and into the appointment list's "Patient name" box. Numbers went into the list's "Mobile" box, since its name box matches names only. "Independent" is a count over the raw documents, using the same rules written out again in the script. Every row is PASS.
+
+| Term | Booking form: API total = independent; patients on screen | Appointment list: total = independent |
+| --- | --- | --- |
+| `Rao`, `rao` | 3 = 3: Anaïs Fernandes-Rao, Arjun Rao, Asha Rao | 31 = 31 |
+| `Asha`, `Asha Rao`, `Rao Asha` | 1 = 1: Asha Rao | 23 = 23 each |
+| `a r` | 5 = 5: Anaïs Fernandes-Rao, Arjun Rao, Asha Rao, Race Anita 10, Race Anita 8 | 35 = 35 |
+| `PAT-000001`, `pat-000001`, `Pat-000001` | 1 = 1: Asha Rao | 0 = 0 (the name box doesn't take codes) |
+| `9876543210`, `+91 98765 43210` | 2 = 2: Arjun Rao, Asha Rao | Mobile box: 30 = 30 |
+| `98765` | 3 = 3: Arjun Rao, Asha Rao, Sunita Patil | Mobile box: 34 = 34 |
+| `jose`, `Álvarez` (accent folding) | 1 = 1: José Álvarez | 6 = 6 |
+| `आशा`, `राव` (Devanagari) | 1 = 1: श्रीमती आशा राव | 1 = 1 |
+| `--` | 0: "No registered patient matches “--”." | 0 = 0: "No appointments match these filters". My script first expected the list to keep `--` out of the URL, as it does for the mobile box; it sends it, and the answer is 0. Expectation corrected and rerun. |
+| `.*` | 0 = 0 | 0 = 0 |
+| `<scr` | 1 = 1: the patient named `<script>alert('xss')</script>`, shown as text, with 0 live `script`/`img` elements | 5 = 5 |
+| `Ritika`, `Sen` (middle word), `Gupta` | 1, 1 and 2 (with Anjali Gupta) | 5, 5 and 12 |
+| `Nath` (middle word), `Mishra` | 1 = 1: Devendra Nath Mishra | 2 = 2 |
+| `anais`, `fernandes`, `Fernandes Anaïs` | 1 = 1: Anaïs Fernandes-Rao | 1 = 1 |
+
+| ID | Steps | Expected | Actual | Result | DB evidence |
+| --- | --- | --- | --- | --- | --- |
+| R2-03-backfill | `npm run backfill:name-words` on `emr_manual_qa` (through `qa/run-script.mjs`, URI never printed), then every word array compared with the words recomputed from the name | No empty or outdated arrays | Exit 0: 46 patients and 164 appointments checked, 0 updated, because they were filled when Q-03 landed and new documents get them from the schema | PASS | 0 of 46 patients and 0 of 164 appointments differ |
+| R2-03-backfill-b | Remove the arrays of 3 patients, set a fourth to `["outdated"]`, and remove the arrays of 3 appointments. Run the backfill again. | It repairs exactly those | Updated: patients 4, appointments 3 | PASS | Afterwards 0 of 46 and 0 of 164 differ |
+| R2-03-explain | `explain` on both searches | Index scans | Patients "rao asha", "आशा" and "jose": IXSCAN `nameWords_1`, 2 keys and 1 document each. Appointments "rao asha": IXSCAN `patientNameWords_1`, 24 keys and 23 documents; "राव" and "fernandes": 2 keys and 1 document. No COLLSCAN. | PASS | |
+
+### R2-04: The "Is it one of these?" hint (Q-02)
+
+| ID | Steps | Expected | Actual | Result | DB evidence |
+| --- | --- | --- | --- | --- | --- |
+| R2-04a | New-patient form at 1280 px and 375 px: type a mobile that one patient has | The hint lists that patient | Looked up `9811100010` once typing paused: "A registered patient has this mobile number", with Meena Pillai (PAT-000024) and one Choose button. The first run used `91234 00001`, which two patients share (José Álvarez from the first pass, and Ritika Sen Gupta, given the same number in R2-01). The hint correctly listed both. The test data was changed and the check rerun. | PASS | Only Meena Pillai has 9811100010 |
+| R2-04b | Type `+91 98765-43210` at both widths | All the patients with it, and the page fits | "2 registered patients have this mobile number" (Arjun Rao, Asha Rao). At 375 px, after R2-04e, there were 3, each with its own Choose button. No sideways scroll. | PASS | `R2-04-mobile-hint-375.png` |
+| R2-04c | Type a new number (9000077001), then a partial one (98765) | No hint | The new number was looked up and there was no hint. For the partial number no request was sent, and there was no hint. | PASS | 0 patients with 9000077001 |
+| R2-04d | Type a name and `9876543210`, choose Asha Rao from the hint, then book | The form switches to that patient, and the booking is hers | "Existing patient" became checked and focused, and the patient card shows Asha Rao. `POST` 201 for PAT-000001. | PASS | Patients 46 → 46: no new record |
+| R2-04e | Ignore the hint: register Kiran Rao with 98765 43210 | Registration still works | The hint was shown. `POST` 201, PAT-000053 Kiran Rao. | PASS | Patients 46 → 47; 3 patients now share 9876543210 |
+
+### R2-05: The earlier fixes, one scenario each
+
+| ID | Steps | Expected | Actual | Result | DB evidence |
+| --- | --- | --- | --- | --- | --- |
+| R2-05-BUG02 | `--` in the booking search; `--` in the list's Mobile box; `GET /appointments?mobile=--` and `/patients?search=--` | Nobody matches | "No registered patient matches “--”"; the list keeps `--` out of its URL; `400`; total 0 | PASS | |
+| R2-05-BUG03 | Type "Asha", cut it back to "A", then empty the box | The results go | 0 results left after "A", and 0 after emptying | PASS | |
+| R2-05-BUG04 | At 375, 768 and 1280 px: the dashboard, the scheduler, the list filtered to the 49-character name, and the booking form with that patient chosen | Nothing pokes out | Every measure is 0 at all three widths: page overflow, tiles wider than their cell, and row actions clipped | PASS | |
+| R2-05-BUG05 | `POST /auth/logout` with a body nested 20,000 levels, then 30 | 400, then normal | `400` "Request body is nested too deeply"; `200` | PASS | |
+| R2-05-BUG06 | A cross-site HTML form posts to `/auth/logout` from a signed-in window. Then curl, with a refresh cookie and no `Origin`, calls refresh and logout. | 403, the user stays signed in; curl works | Form POST: `403`. The cookie was kept, and after a reload the user was still on /appointments. curl refresh: `200` with a new cookie; curl logout: `200` with the cookie cleared. A new integration test (`af24a56`) covers requests without an `Origin`. | PASS | |
+| R2-05-BUG07 | Log Rahul Menon out in the UI; refresh Dr. Meera Iyer's session, then present the old cookie again | Both audit entries carry the role | LOGOUT: role RECEPTIONIST. Refresh `200`, reused cookie `401`, then REFRESH_TOKEN_REUSE: role DOCTOR. | PASS | The 7 entries without a role all date from 18 Oct, before the fix. Every entry since has a role. |
+| R2-05-BUG08 | Offline, open "Staff and schedules" before its code has loaded | "You're offline" | "You're offline. This page needs a connection to load. Reconnect, then reload the page." After reconnecting and reloading, the page opens. | PASS | |
+| R2-05-BUG09 | Offline: choose Dr. Verma in the scheduler; reconnect. Then, offline, press "Book appointment" for an existing patient; reconnect and wait 6 s. | An error instead of an endless load; the grid returns by itself; the booking fails at once and never sends itself | "Couldn't load the slots. Can't reach the server…" after 4 s. The grid came back by itself after reconnecting. The booking alert said "Can't reach the server…", and 0 requests were sent after reconnecting. The first run chose Dr. Qureshi, who doesn't work on Tuesdays, so no grid could come back. The doctor was changed and the check rerun. | PASS | 0 appointments for that slot |
+
+### R2-06: The full flow as each role
+
+The windows were 1180 px wide, and another role's window kept the scheduler open, without reloading, to watch for live updates.
+
+| ID | Steps | Expected | Actual | Result | DB evidence |
+| --- | --- | --- | --- | --- | --- |
+| R2-06-SA | Super Admin: log in; create Dr. Tara Bhatt (Pediatrics, 15 minutes); set the schedule (add Saturday 10:00–13:00); book a new patient (Ishita Kulkarni) and an existing one (Kiran Rao) for Wed 21 Oct; mark the visit arrived, then complete it; cancel the other; rebook its slot (Anjali Gupta). The receptionist's window watches. | Each step works, and the other window follows | Schedule `200` (6 days, 15 minutes). Bookings `201` (PAT-000054), `201` and `201`. ARRIVED, then COMPLETED, then CANCELLED. Each change was already on the receptionist's screen when checked, without a reload. | PASS | Doctor `6ad743a40e59a09eb5855612` |
+| R2-06-R | Receptionist: check the menu and `/admin`; book a new patient (Farah Siddiqui) and an existing one (Ravi Kumar) for Thu 22 Oct; mark arrived; cancel; rebook (Sunita Patil). The admin's window watches. | Each step works; no staff page and no Complete | The menu is Dashboard, Scheduler, Book appointment and Appointments. `/admin` shows "You don't have access to this page". `201` three times. ARRIVED, with no Complete button for the receptionist, then CANCELLED. Every change appeared live. | PASS | |
+| R2-06-D | Dr. Tara Bhatt: check the menu and `/appointments/new`; check her list; watch her Friday while the desk books and checks in Meena Pillai; complete the visit and write notes | Only her own appointments; live; can't book or cancel; notes only | The menu is Dashboard, Scheduler and Appointments. `/appointments/new` shows the 403 page. The list holds 6 = 6 in the DB. The booking and the arrival appeared live. There was no Cancel button. Complete gave COMPLETED. In the edit dialog the purpose was read-only, and the notes were saved. The first run counted rows "of other doctors" as rows without her name, but a doctor's list has no Doctor column. Rechecked from the API: 7 of 7 rows are hers (R2-06-D-own). | PASS | `notes` saved, `status` COMPLETED |
+| R2-06-logout | Every role logs out, then opens the list again | Back on /login | All three were sent back to /login | PASS | LOGOUT audit entries with roles SUPER_ADMIN, RECEPTIONIST and DOCTOR |
+| R2-06-console | Console and network across the three windows | Clean | No console error or warning, no failed request and no unexpected error response | PASS | |
+
+### R2-07: The database after the retest (H-01 to H-09 again)
+
+| ID | Check | Result | DB evidence |
+| --- | --- | --- | --- |
+| R2-07-H-01 | Every appointment has every field, including the new `patientNameWords`, with valid formats | PASS | 173 appointments, no problems |
+| R2-07-H-02 | Copied fields and word arrays match their sources | PASS | 0 of 173 appointments differ (code, name, mobile, doctor name, words); 0 of 49 patients differ (`nameWords`, `nameLower`) |
+| R2-07-H-03 | Audit entries per action, each with user, role, entity and time | PASS | ARRIVE 23, CANCEL 33, COMPLETE 9, CREATE appointment 173, doctor 6, patient 49, user 3, LOGIN 182, LOGIN_FAILED 22 (6 for unknown emails, which have no user), LOGOUT 10, REFRESH_TOKEN_REUSE 8, UPDATE appointment 6, UPDATE doctor (schedule edits) 48. The only entries without a role are 7 from before BUG-07's fix (18 Oct). |
+| R2-07-H-03b | Audit entries agree with appointment states | PASS | 0 disagreements |
+| R2-07-H-04 | Refresh tokens are stored as SHA-256 hashes only | PASS | 687 tokens, 0 raw JWTs, 0 malformed hashes |
+| R2-07-H-05 | No orphan documents | PASS | 0 in all 12 relations |
+| R2-07-H-06 | No duplicate active doctor, date and start | PASS | 0 groups |
+| R2-07-H-07 | No overlapping active appointments | PASS | 0 pairs among 140 |
+| R2-07-H-08 | Patient codes | INFO | 49 patients, unique, all in the `PAT-NNNNNN` format; counter at 55. The 6 missing codes were reserved by bookings that lost a race in the first pass (E-04). PAT-000047 also dates from 18 Oct. |
+| R2-07-H-09 | Passwords | PASS | 10 users, all bcrypt cost 12 |
+
+### R2 housekeeping
+
+| ID | Check | Result | Evidence |
+| --- | --- | --- | --- |
+| R2-H-01 | The untracked root `package.json` and `package-lock.json` (P-01) | Done | Deleted; they were never committed |
+| R2-H-02 | Requests without an `Origin` reach `/auth/refresh` and `/auth/logout` | PASS | curl in R2-05-BUG06, plus the integration tests in `af24a56`. They fail if the check refuses a missing `Origin`. The literal origin `null` is refused. |
+| R2-H-03 | `server/.env` and `.env.example` are at their defaults | PASS | Both have `NODE_ENV=development`, `JWT_ACCESS_TTL_SECONDS=900` and `RATE_LIMIT_MAX=300`, and all their other settings match. `.env` was never committed (`git log --all` has no entry for it). |
+| R2-H-04 | The whole git history searched for "mongodb+srv" and for real secrets | PASS | 0 matches in any commit for each of 14 real values: the Atlas user, password and host, both JWT secrets, the seed admin password and the 7 QA passwords. Only counts were printed. "mongodb+srv" appears only in the env validation regex, the `.env.example` placeholder and two lines of prose. |
+| R2-H-05 | `qa/` and `qa-credentials.local.md` are gitignored | PASS | `.gitignore` lines 34 and 35 (`git check-ignore -v`) |
+| R2-H-06 | At most 10 screenshots in git | Done | See [Screenshots](#screenshots) |
+| R2-H-07 | API.md, DATABASE_DESIGN.md and decisions-notes cover the nested-body 400, the foreign-origin 403, the digit rule for mobile terms, the audit role, the new indexes and the schedule-edit 409 | Done | `2465c11` adds the audit role and the origin rule to API.md and DATABASE_DESIGN.md, and the digit rule to DATABASE_DESIGN.md. The rest landed with each change. |
+
 ## Bugs
 
-All nine were found in this pass and are fixed, each in its own commit with a regression test. Each fix was retested against the running app ("Retest"), and each regression test was confirmed to fail without its fix.
+BUG-01 to BUG-09 were found in the first pass, and BUG-10 to BUG-12 in the R2 retest. All twelve are fixed, each in its own commit with a regression test. Each fix was retested against the running app ("Retest"), and each regression test was confirmed to fail without its fix.
 
 | Bug | Severity | Where | What was wrong (root cause) | Fix | Regression test | Retest |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -353,24 +502,30 @@ All nine were found in this pass and are fixed, each in its own commit with a re
 | BUG-07 | Low | API, audit | LOGOUT (2) and REFRESH_TOKEN_REUSE (5) entries had no role (H-03); the brief asks for user, role, action, entity and time on every entry | `5f10c59` the role is looked up for both | `auth.test.ts` | R-08 PASS |
 | BUG-08 | Low | Client | Offline, opening a page whose code hadn't loaded yet said "A newer version is available. The app was updated while this tab was open" (I-07a) | `a6d3f56` "You're offline. … Reconnect, then reload the page." when `navigator.onLine` is false | `ErrorFallback.test.tsx` | I-07a PASS |
 | BUG-09 | Medium | Client | Offline, nothing told the user (I-07b): TanStack Query paused requests (`networkMode: 'online'`), so the scheduler showed skeletons for as long as it lasted, the list showed old rows under a new filter, and **a booking would have sent itself whenever the connection came back** | `4400431` `networkMode: 'always'` for queries and mutations, so they fail into the existing error states, plus an explicit `refetchOnReconnect: true` (with `'always'` it defaults to off) | `query-client.test.ts`: a query and a mutation made offline, and the reload on reconnect | I-07b PASS: "Couldn't load the slots … Try again", reload on reconnect |
+| BUG-10 | Medium | Client, admin | When a schedule change was refused (R2-01a), the list of bookings it would strand appeared at the top of the editor, about 1,500 px above the Save button just pressed, so a sighted user saw nothing happen. The create-doctor form put its general error in the same place. Both forms are taller than a screen, and each placed its form-level alert first. | `812f136` both alerts sit directly above their button, and `useRevealOnChange` scrolls them fully into view with the button still visible. The booking form's slot problem uses the same hook. | `e2e/admin.spec.ts`: the refusal, and a 500 on adding a doctor, are fully in the viewport | R2-01a/b/c rerun at 1280 and 375 px PASS (`R2-01-schedule-change-refused.png`) |
+| BUG-11 | Medium | Client, admin | At 375 px every time in the schedule editor lost its last digit: "09:00" read "09:0", so the minutes couldn't be read on a phone (found while checking R2-01's screenshots). Each range is one row (start, "to", end, remove), which left each box 88 to 95 px, and a box needs 104 px to show the time beside Chromium's clock button. The page-overflow checks missed it, because the text is clipped inside the box. | `fcab9c5` below an 18rem container, a range's name and remove button take a line of their own, and the times share the full width: 112 px each at 375 px | `e2e/responsive.spec.ts` "the schedule editor shows each time in full" at 375, 768 and 1280 px | R2: 112 px boxes and 0 overflow at 375 px, in the editor and the create-doctor form (`R2-BUG11-times-clipped-375.png`, `R2-BUG11-times-in-full-375.png`) |
+| BUG-12 | Medium | Client, list | At 768 px, and from 1024 px where the sidebar returns, the appointment list had **no sort control on screen** (R2-02c). Below a 48rem container the table shows cards with its headers visually hidden, while the "Sort by" choice was hidden from 768 px by a screen-width breakpoint (`md`). Sorting by Booked needed a screen about 1,500 px wide, since that column appears at a 72rem container. The choice also offered only 6 of the 10 sorts. | `545795c` the choice follows the table's container, shows until every sortable header fits, and offers all 10 sorts | `e2e/responsive.spec.ts` "every sort can be chosen" at 375, 768 and 1280 px | R2-02c: 20 of 20 PASS at 1280 and 768 px (`R2-BUG12-no-sort-control-768.png`, `R2-BUG12-sort-choice-768.png`) |
 
-Server tests went from 174 to 184 and client unit tests to 102, plus the two end-to-end changes above.
+In the first pass, server tests went from 174 to 184 and client unit tests to 102, plus the two end-to-end changes above. With the Q changes and the R2 fixes, the totals are 215 server tests, 110 client tests and 91 end-to-end tests.
 
 ## Open questions
 
-These are ambiguous against `ASSESSMENT.md`, or behaviour you may want different. None was changed.
+These are ambiguous against `ASSESSMENT.md`, or behaviour you may want different. Q-01 to Q-07 come from the first pass, and the Status column says what was done with each. Q-08 and Q-09 come from the R2 retest; nothing was changed for them.
 
-| Q | Behaviour seen | Options |
-| --- | --- | --- |
-| Q-01 | **A doctor with no working days is accepted** (A-15): every day switched off, 201, no warning. The brief lists "no working days" among invalid schedules. API.md documents `[]` as allowed, for example for a doctor on leave. | (a) Keep, and add a confirmation in the UI. (b) Require one working day when creating a doctor, but allow `[]` when editing (leave). (c) Always require one. |
-| Q-02 | **Duplicate patients.** A new patient with an existing mobile is registered silently (B-UI-16: Arjun Rao shares Asha Rao's number). Two identical registrations in parallel give two records (E-04a). Mobiles are deliberately not unique, because families share phones. | (a) Keep. (b) When the typed mobile matches registered patients, show them in the new-patient form as "Is it one of these?" without blocking. (c) Refuse exact duplicates (same name, mobile and date of birth) with 409 and offer the existing record. |
-| Q-03 | **Name search matches only the start of the full name** (B-S-10): "Rao" finds neither Asha Rao nor Arjun Rao. Patient IDs must be typed in full (`PAT-1` finds nothing), and accents aren't folded (`jose` misses José). Documented in API.md. | (a) Keep. (b) Match the start of any word: store the name's words in an indexed array and search `/^rao/` there; still an index scan. (c) Atlas Search. |
-| Q-04 | **No booking horizon** (B-X-55): a slot in 2099 passes every slot rule | (a) Keep. (b) A configurable horizon (for example 90 days) answered with 422. |
-| Q-05 | **Operator-looking query parameters get 200, not 400** (F-11b). `?search[$gt]=` is a literal unknown key that the schema ignores, so the request runs without that filter. Nothing is injected, but the brief expects 400. JSON bodies with operators do get 400 (F-11a). | (a) Keep: unknown parameters are ignored, as documented. (b) Strict query schemas: unknown or bracketed parameters get 400. |
-| Q-06 | **COLLSCAN on lists without a filter** (G-06): the default appointment list, the sorts by patient name and by `createdAt`, and the patient list without a term. Harmless at this size; DATABASE_DESIGN.md §10 measured 160 ms at 43,000 appointments. | (a) Keep for clinic scale. (b) Apply the documented index changes (`{date, slotStart, _id}`, `{patientNameLower, _id}`, `{nameLower, _id}`), add `{createdAt, _id}`, and use `estimatedDocumentCount` for unfiltered totals. |
-| Q-07 | **Schedule edits with booked appointments** (A-20). Booked appointments never move, are never flagged, and nothing can be undone safely. An appointment off the new grid disappears from the day sheet, though it stays in the list. Slots overlapping a booked visit are offered, so a doctor can end up with **two patients at the same time** (A-20b). Removing a day strands its bookings. The double-booking index only compares start times. | (a) Keep, and document it (the current state). (b) Refuse a change that strands active future appointments: 409, listing them. (c) Allow it, but list the affected appointments for rebooking and show off-grid bookings on the day sheet. (d) Work out availability by time overlap, so a slot overlapping any active appointment is BOOKED, and check the overlap in the booking transaction. That closes the overlap however the grid changes. |
+| Q | Behaviour seen | Options | Status |
+| --- | --- | --- | --- |
+| Q-01 | **A doctor with no working days is accepted** (A-15): every day switched off, 201, no warning. The brief lists "no working days" among invalid schedules. API.md documents `[]` as allowed, for example for a doctor on leave. | (a) Keep, and add a confirmation in the UI. (b) Require one working day when creating a doctor, but allow `[]` when editing (leave). (c) Always require one. | **Kept** (a, without the confirmation): README "Assumptions" and "Known limitations" (`aed025d`) |
+| Q-02 | **Duplicate patients.** A new patient with an existing mobile is registered silently (B-UI-16: Arjun Rao shares Asha Rao's number). Two identical registrations in parallel give two records (E-04a). Mobiles are deliberately not unique, because families share phones. | (a) Keep. (b) When the typed mobile matches registered patients, show them in the new-patient form as "Is it one of these?" without blocking. (c) Refuse exact duplicates (same name, mobile and date of birth) with 409 and offer the existing record. | **Resolved** with (b): `224107d`. Retested in R2-04. |
+| Q-03 | **Name search matches only the start of the full name** (B-S-10): "Rao" finds neither Asha Rao nor Arjun Rao. Patient IDs must be typed in full (`PAT-1` finds nothing), and accents aren't folded (`jose` misses José). Documented in API.md. | (a) Keep. (b) Match the start of any word: store the name's words in an indexed array and search `/^rao/` there; still an index scan. (c) Atlas Search. | **Resolved** with (b), for patient search and the list's patient filter, with a backfill script: `aa70eb2`. Retested in R2-03. |
+| Q-04 | **No booking horizon** (B-X-55): a slot in 2099 passes every slot rule | (a) Keep. (b) A configurable horizon (for example 90 days) answered with 422. | **Kept** (a): README "Known limitations" (`aed025d`) |
+| Q-05 | **Operator-looking query parameters get 200, not 400** (F-11b). `?search[$gt]=` is a literal unknown key that the schema ignores, so the request runs without that filter. Nothing is injected, but the brief expects 400. JSON bodies with operators do get 400 (F-11a). | (a) Keep: unknown parameters are ignored, as documented. (b) Strict query schemas: unknown or bracketed parameters get 400. | **Kept** (a): README "Assumptions" and "Known limitations", and API.md's input rules (`aed025d`) |
+| Q-06 | **COLLSCAN on lists without a filter** (G-06): the default appointment list, the sorts by patient name and by `createdAt`, and the patient list without a term. Harmless at this size; DATABASE_DESIGN.md §10 measured 160 ms at 43,000 appointments. | (a) Keep for clinic scale. (b) Apply the documented index changes (`{date, slotStart, _id}`, `{patientNameLower, _id}`, `{nameLower, _id}`), add `{createdAt, _id}`, and use `estimatedDocumentCount` for unfiltered totals. | **Resolved** with (b): `ccb6a9f`, then 0 COLLSCAN in R2-02. Sorting of filtered searches: see Q-09. |
+| Q-07 | **Schedule edits with booked appointments** (A-20). Booked appointments never move, are never flagged, and nothing can be undone safely. An appointment off the new grid disappears from the day sheet, though it stays in the list. Slots overlapping a booked visit are offered, so a doctor can end up with **two patients at the same time** (A-20b). Removing a day strands its bookings. The double-booking index only compares start times. | (a) Keep, and document it (the current state). (b) Refuse a change that strands active future appointments: 409, listing them. (c) Allow it, but list the affected appointments for rebooking and show off-grid bookings on the day sheet. (d) Work out availability by time overlap, so a slot overlapping any active appointment is BOOKED, and check the overlap in the booking transaction. That closes the overlap however the grid changes. | **Resolved** with (b): `ddb27d1`, including a race between an edit and a booking. Retested in R2-01, which found BUG-10. |
+| Q-08 | **Two admins saving one schedule at once: the later save wins** (R2-01l). Both editors were opened on the same week, and each changed a different day. The second save replaced the whole week, so the first admin's change was lost without a word, although both saw "Schedule saved". The result is always a valid schedule that strands no booking (R2-01l, R2-01n). | (a) Keep: one Super Admin usually manages schedules, and the editor reloads after a save. (b) Optimistic concurrency: the editor sends the `scheduleVersion` it loaded, and a mismatch gets 409 "This schedule was changed by someone else. Reload it, then make your change again", shown the way the stranded-booking refusal is. | Open |
+| Q-09 | **Filtered searches sort in memory** (R2-02a). 10 of the 37 shapes find their rows through an index and then sort the matches in memory (at most 34 documents here): the patient word, mobile and code searches, and the list filtered by status but sorted by patient name. Every unfiltered list and every sort of the full list reads its order from an index. A prefix match is a range on one index, so that index can't also supply another field's order. | (a) Keep: a search returns few rows, and MongoDB's in-memory sort limit (100 MB) is far away. (b) Add compound indexes for the equality filters with each sort, for example `{status, patientNameLower, _id}`: up to 5 more per filter, each slowing writes. (c) For broad terms (one letter), let the query walk the sort's index and filter as it goes: cheaper for broad terms, worse for selective ones. | Open |
 
 Smaller observations, not bugs:
+- When a schedule edit and a booking of a slot it removes arrive at the same moment, both can be refused (5 of 10 rounds in R2-01o): each side's re-check sees the other's write and backs out. Both never succeed. The receptionist then sees "This time is not a slot in the doctor's schedule", and the admin a 409 listing a booking that was just withdrawn; trying again succeeds.
 - The schedule editor offers slot lengths of 5, 10, 15, 20, 30, 45 and 60 minutes only, while the API accepts 5 to 240. A 25-minute doctor can only be set up through the API (A-13).
 - Arrival can be marked on any date, including before the appointment's day (documented judgment call).
 - A reload in the middle of the booking form loses what was typed (I-04), because nothing is kept in browser storage. The doctor, day and slot survive in the URL.
@@ -381,7 +536,18 @@ Smaller observations, not bugs:
 
 ## Final regression runs
 
-Run on Tuesday 20 Oct, after all nine fixes:
+Run on Tuesday 20 Oct at about 16:50 IST, after the Q changes and all twelve fixes:
+
+| Gate | Server | Client |
+| --- | --- | --- |
+| Prettier (`format:check`) | clean | clean |
+| ESLint (`lint`) | clean | clean |
+| `tsc --noEmit` (`typecheck`) | clean | clean (app, tool configs and e2e) |
+| Unit and integration tests | **215 passed** (29 files); coverage 93.09% of statements, 93.03% of lines | **110 passed** (22 files) |
+| Production build | clean | clean |
+| End-to-end (`npm run e2e`) | | **91 passed** (5.5 min), on the first run |
+
+The earlier final runs, after the first nine fixes:
 
 | Gate | Server | Client |
 | --- | --- | --- |
@@ -394,13 +560,31 @@ Run on Tuesday 20 Oct, after all nine fixes:
 
 The first e2e run had one timeout (81 passed): the axe-core test "the front desk's pages and dialogs" ran 14 scans in its 60-second budget while the server's coverage run used the same machine. On its own the test passed with no axe violations, and the whole suite then passed on a quiet machine. Every fix commit's changed files were also checked against Prettier at that commit.
 
+## Screenshots
+
+Ten are kept in [`docs/manual-qa/`](manual-qa/). The rest of the run's screenshots are outside git, in the gitignored `qa/manual-qa-archive/` (first pass) and `qa/shots-r2/` (R2).
+
+| File | Shows |
+| --- | --- |
+| `E-01-round1-loser.png` | Double booking: the window that lost the race is told, and sees the slot taken (E-01) |
+| `LT-before-1280-list.png` | BUG-04 before the fix: a 49-character name pushes the row's actions out of the list at 1280 px |
+| `LT-after-1280-list.png` | BUG-04 after the fix |
+| `A-20a-grid-after-20-min.png` | Q-07 before the change: a slot-length change left booked visits off the grid and offered overlapping slots |
+| `R2-01-schedule-change-refused.png` | Q-07 after the change (and BUG-10's fix): the refusal lists the bookings, next to the Save button |
+| `R2-BUG11-times-clipped-375.png` | BUG-11 before the fix: "09:0" in the schedule editor at 375 px |
+| `R2-BUG11-times-in-full-375.png` | BUG-11 after the fix |
+| `R2-BUG12-no-sort-control-768.png` | BUG-12 before the fix: the list at 768 px, with no sort control |
+| `R2-BUG12-sort-choice-768.png` | BUG-12 after the fix: the "Sort by" choice at 768 px |
+| `R2-04-mobile-hint-375.png` | Q-02: "Is it one of these?" for a number three patients share, at 375 px |
+
 ## Not tested
 
 - Browsers other than Chromium (Firefox, Safari, real phones), and screen readers such as NVDA and JAWS. Accessibility was only checked through roles, names and live regions.
+- The native time pickers of real phones. BUG-11's 104 px was measured in desktop Chromium, whose time box shows a clock button.
 - `GET /health` answering 503 when the database is down: the Atlas cluster couldn't be made unreachable from here.
 - More than one API instance (Socket.IO across instances), and running behind a proxy (`TRUST_PROXY_HOPS`).
 - `REFRESH_COOKIE_SAMESITE=none` deployments (only covered by the new integration test of the origin check).
 - The TTL index actually deleting a refresh token: that needs 7 days. The index itself was verified (P-03).
 - An open app crossing midnight on the clinic's clock: the date changed between the two test sessions, not under an open screen.
-- Performance at large volume: the plans in G-06 come from 149 appointments.
+- Performance at large volume: the plans in G-06 come from 149 appointments, and those in R2-02a from 163. The before-and-after comparison in DATABASE_DESIGN.md §10 used a local MongoDB with 43,260 generated appointments, not this database.
 - Daylight saving: Asia/Kolkata has none.
