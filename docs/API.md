@@ -241,6 +241,7 @@ Logs in with an email and password. Returns an access token and sets the refresh
 - **Roles:** public
 - **Headers:** `Content-Type: application/json`
 - **Rate limit:** 10 failed attempts per IP address per 15 minutes, on top of the [global limit](#rate-limits)
+- **Audit:** a `LOGIN` entry, or `LOGIN_FAILED` with the reason, naming the user and their role. A failed login with an unknown email has no user, so its entry records only the email tried.
 
 **Body**
 
@@ -404,7 +405,7 @@ Set-Cookie: emr_refresh=<refresh token>; Path=/api/v1/auth; Expires=Sun, 25 Oct 
 
 Every failure with a cookie also clears it (`Set-Cookie: emr_refresh=; ... Expires=Thu, 01 Jan 1970 00:00:00 GMT`), because a refresh cookie that failed once never works again. A request without the cookie leaves the browser's cookie alone.
 
-A request whose `Origin` header names another site gets `403 Cross-site requests are not allowed`, so no other page can use the cookie. Requests without `Origin` (curl, Postman) are not affected.
+A request whose `Origin` header names another site, or is the literal `null` that sandboxed frames send, gets `403 Cross-site requests are not allowed`, so no other page can use the cookie. Requests without `Origin` (curl, Postman, another server) are not affected: they carry no browser cookie that a forged request could borrow.
 
 | Status | `message` | When |
 | --- | --- | --- |
@@ -412,7 +413,7 @@ A request whose `Origin` header names another site gets `403 Cross-site requests
 | 403 | `Cross-site requests are not allowed` | The `Origin` header is not `CLIENT_URL` |
 | 401 | `Invalid token` | The cookie is not a valid refresh token |
 | 401 | `Token has expired` | The refresh token is older than 7 days |
-| 401 | `Your session has expired, please log in again` | The token is unknown or revoked, or the user is deactivated. A token that was already revoked, by logout or by an earlier refresh, is treated as stolen: every session of that user is revoked. |
+| 401 | `Your session has expired, please log in again` | The token is unknown or revoked, or the user is deactivated. A token that was already revoked, by logout or by an earlier refresh, is treated as stolen: every session of that user is revoked, and a `REFRESH_TOKEN_REUSE` audit entry names the user and their role. |
 
 <details>
 <summary>Example error responses</summary>
@@ -464,6 +465,7 @@ Revokes the refresh token in the cookie and clears the cookie. It succeeds even 
 
 - **Roles:** public; the `emr_refresh` cookie is optional
 - **Body:** none
+- **Audit:** a `LOGOUT` entry naming the user and their role, when the cookie names a live session. The role is looked up from the user, because a refresh token records only the user id.
 
 **Example request**
 
@@ -489,7 +491,7 @@ curl -X POST "$BASE_URL/auth/logout" \
 Set-Cookie: emr_refresh=; Path=/api/v1/auth; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Strict
 ```
 
-**Error responses:** `403 Cross-site requests are not allowed` when the `Origin` header names another site, as for [refresh](#post-authrefresh), and the [rate limit](#rate-limits).
+**Error responses:** `403 Cross-site requests are not allowed` when the `Origin` header names another site (the literal origin `null` included), as for [refresh](#post-authrefresh), and the [rate limit](#rate-limits). Requests without an `Origin` header, such as curl's, are not affected.
 
 ### Users
 

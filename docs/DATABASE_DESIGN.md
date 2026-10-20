@@ -352,7 +352,7 @@ The schema turns off the version key, so there is no `__v`.
 | --- | --- | --- | --- |
 | `_id` | ObjectId | auto | |
 | `userId` | ObjectId → `users` | no | Who acted. Missing for a failed login with an unknown email. |
-| `role` | String | no | The actor's role, when known |
+| `role` | String | no | The actor's role. Every entry with a `userId` has one: LOGOUT and REFRESH_TOKEN_REUSE look it up from the user, since a refresh token records only the user id. Only a failed login with an unknown email has neither. |
 | `action` | String | yes | `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `REFRESH_TOKEN_REUSE`, `CREATE`, `UPDATE`, `CANCEL`, `ARRIVE` or `COMPLETE` |
 | `entity` | String | yes | `USER`, `DOCTOR`, `PATIENT` or `APPOINTMENT` |
 | `entityId` | ObjectId | no | The record that was acted on |
@@ -455,7 +455,7 @@ An index lets MongoDB find documents without reading the whole collection. Every
 | `doctors` | `{ departmentId: 1, name: 1 }` (`departmentId_1_name_1`) | compound | Doctor list: `find({ departmentId })` sorted by `{ name: 1 }` | Filter by department and sort by name from one index |
 | `doctors` | `{ name: 1 }` (`name_1`), `{ specialization: 1 }` (`specialization_1`) | single field | The doctor list sorted by name; doctor search ("contains" on name or specialization); the appointment list's `doctorName` filter | A scan of a small index instead of the collection |
 | `patients` | `{ patientCode: 1 }` (`patientCode_1`) | unique | Search by code: `find({ patientCode: 'PAT-000042' })` | Codes are unique, and staff look patients up by them |
-| `patients` | `{ mobile: 1 }` (`mobile_1`) | single field | Search by mobile: `find({ mobile: /^98765/ })` | Anchored prefix match while typing |
+| `patients` | `{ mobile: 1 }` (`mobile_1`) | single field | Search by mobile: `find({ mobile: /^98765/ })`. A term is read as a mobile number only if it has a digit; separators alone (`--`) are a name with no words, and match nothing. | Anchored prefix match while typing |
 | `patients` | `{ nameWords: 1 }` (`nameWords_1`) | multikey | Search by name: each word typed is an anchored prefix, `find({ $and: [{ nameWords: /^rao/ }, { nameWords: /^asha/ }] })` | Finds a patient by any of their names, in any order |
 | `patients` | `{ nameLower: 1, _id: 1 }` (`nameLower_1__id_1`) | compound | The patient list sorted by name, with `_id` as the tie-breaker | Rows come from the index in order; no in-memory sort |
 | `appointments` | `{ doctorId: 1, date: 1, slotStart: 1 }` (`uniq_active_doctor_slot`) | **partial unique**, compound | Every booking insert; also the slot grid query `find({ doctorId, date, status: { $in: [active statuses] } })` | **Prevents double booking**. See below. |
