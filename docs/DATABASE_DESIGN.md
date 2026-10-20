@@ -94,6 +94,7 @@ erDiagram
         string patientCode UK
         string name
         string nameLower
+        string[] nameWords
         string mobile
         string gender
         string dateOfBirth
@@ -118,6 +119,7 @@ erDiagram
         string patientCode "copied"
         string patientName "copied"
         string patientNameLower "copied"
+        string[] patientNameWords "copied"
         string patientMobile "copied"
         string doctorName "copied"
         date createdAt
@@ -257,7 +259,8 @@ The embedded day and time-range objects have no `_id` of their own (`_id: false`
 | `_id` | ObjectId | auto | |
 | `patientCode` | String | yes | **Unique.** For example `PAT-000042`, numbered by the `patientCode` counter. |
 | `name` | String | yes | Trimmed, at most 100 characters |
-| `nameLower` | String | yes | A lowercase copy of `name`, set automatically before every validation. Used for prefix search. |
+| `nameLower` | String | yes | A lowercase copy of `name`, set automatically before every validation. Used for sorting by name. |
+| `nameWords` | Array of String | no | The words of `name`, lowercase with Latin accents folded ("José Álvarez" → `["jose", "alvarez"]`), set automatically. **Multikey index.** Name search matches each word typed as the start of one of these. |
 | `mobile` | String | yes | 10 digits starting with 6–9, normalized before saving. **Not unique**, because families often share a phone. |
 | `gender` | String | yes | `MALE`, `FEMALE` or `OTHER` |
 | `dateOfBirth` | String | no | `"YYYY-MM-DD"`. The booking validator also rejects future dates. |
@@ -269,6 +272,7 @@ The embedded day and time-range objects have no `_id` of their own (`_id: false`
   patientCode: 'PAT-000042',
   name: 'Asha Rao',
   nameLower: 'asha rao',
+  nameWords: ['asha', 'rao'],
   mobile: '9876543210',
   gender: 'FEMALE',
   dateOfBirth: '1990-05-14',
@@ -295,7 +299,8 @@ The embedded day and time-range objects have no `_id` of their own (`_id: false`
 | `createdBy` | ObjectId → `users` | yes | The staff member who booked it |
 | `arrivedAt`, `completedAt`, `cancelledAt` | Date | no | Set by the matching status change |
 | `patientCode`, `patientName`, `patientMobile` | String | yes | **Copied** from the patient at booking time |
-| `patientNameLower` | String | yes | Lowercase copy of `patientName`, set automatically |
+| `patientNameLower` | String | yes | Lowercase copy of `patientName`, set automatically; for sorting by patient name |
+| `patientNameWords` | Array of String | no | Copy of the patient's name words, set automatically; for the list's patient filter |
 | `doctorName` | String | yes | **Copied** from the doctor at booking time |
 | `createdAt`, `updatedAt` | Date | auto | Timestamps |
 
@@ -317,6 +322,7 @@ The embedded day and time-range objects have no `_id` of their own (`_id: false`
   patientCode: 'PAT-000042',
   patientName: 'Asha Rao',
   patientNameLower: 'asha rao',
+  patientNameWords: ['asha', 'rao'],
   patientMobile: '9876543210',
   doctorName: 'Dr. Kavya Mehta',
   createdAt: ISODate('2026-10-09T10:02:11.000Z'),
@@ -425,7 +431,8 @@ MongoDB lets you either **reference** another document (store its `_id`) or **em
 The appointment list is the busiest screen. It searches by patient name and mobile, filters and sorts, and shows names. With copies on the appointment, one query answers all of that from indexes. Without them, every list request would need a `$lookup` (a join) into `patients` and `doctors` before it could filter or sort.
 
 - `patientCode` is copied too, for display.
-- `patientNameLower` is a lowercase copy kept up to date by a small schema plugin, so case-insensitive prefix search can use an index.
+- `patientNameLower` is a lowercase copy kept up to date by a small schema plugin, so sorting by patient name ignores case and can use an index.
+- `patientNameWords` holds the name's words (lowercase, Latin accents folded), kept up to date by another small plugin, so the list can find "rao" in "Asha Rao" from an index.
 - **The trade-off:** if a patient's name or a doctor's name changed later, old appointments would keep the old value. This module has no flows that edit those fields. If it gets them, a background job can update the copies.
 
 ### Why slots are generated on the fly, not stored
@@ -449,6 +456,7 @@ An index lets MongoDB find documents without reading the whole collection. Every
 | `doctors` | `{ name: 1 }` (`name_1`), `{ specialization: 1 }` (`specialization_1`) | single field | The doctor list sorted by name; doctor search ("contains" on name or specialization); the appointment list's `doctorName` filter | A scan of a small index instead of the collection |
 | `patients` | `{ patientCode: 1 }` (`patientCode_1`) | unique | Search by code: `find({ patientCode: 'PAT-000042' })` | Codes are unique, and staff look patients up by them |
 | `patients` | `{ mobile: 1 }` (`mobile_1`) | single field | Search by mobile: `find({ mobile: /^98765/ })` | Anchored prefix match while typing |
+| `patients` | `{ nameWords: 1 }` (`nameWords_1`) | multikey | Search by name: each word typed is an anchored prefix, `find({ $and: [{ nameWords: /^rao/ }, { nameWords: /^asha/ }] })` | Finds a patient by any of their names, in any order |
 | `patients` | `{ nameLower: 1, _id: 1 }` (`nameLower_1__id_1`) | compound | The patient list sorted by name, with `_id` as the tie-breaker | Rows come from the index in order; no in-memory sort |
 | `appointments` | `{ doctorId: 1, date: 1, slotStart: 1 }` (`uniq_active_doctor_slot`) | **partial unique**, compound | Every booking insert; also the slot grid query `find({ doctorId, date, status: { $in: [active statuses] } })` | **Prevents double booking**. See below. |
 | `appointments` | `{ doctorId: 1, date: 1 }` (`doctorId_1_date_1`) | compound | A doctor's own list, `{ doctorId }` with an optional date range; the `doctorName` filter after it becomes `{ doctorId: { $in: [...] } }` | The partial index above can't serve queries that don't filter on status |
@@ -456,6 +464,7 @@ An index lets MongoDB find documents without reading the whole collection. Every
 | `appointments` | `{ departmentId: 1, date: 1 }` (`departmentId_1_date_1`) | compound | List filtered by `departmentId`, with a date range | Department view |
 | `appointments` | `{ date: 1, slotStart: 1, _id: 1 }` (`date_1_slotStart_1__id_1`) | compound | The default list (sorted by date and time) and lists filtered by a date range | The list in order straight from the index, forwards or backwards |
 | `appointments` | `{ patientMobile: 1 }` (`patientMobile_1`) | single field | List filter `{ patientMobile: /^98765/ }` | Mobile search on the copied field |
+| `appointments` | `{ patientNameWords: 1 }` (`patientNameWords_1`) | multikey | The list's patient filter, word by word as above | Name search on the copied field |
 | `appointments` | `{ patientNameLower: 1, _id: 1 }` (`patientNameLower_1__id_1`) | compound | The list sorted by patient name | Sort without reading the whole collection |
 | `appointments` | `{ createdAt: 1, _id: 1 }`, `{ doctorName: 1, _id: 1 }`, `{ status: 1, _id: 1 }` | compound | The list sorted by booking time, doctor or status | Every sort the list offers is an index (see [section 10](#10-query-optimization-strategy)) |
 | `audit_logs` | `{ createdAt: -1 }` (`createdAt_-1`) | single field, descending | No query reads audit logs yet; only writes | Prepared for an audit screen: newest activity first |
@@ -465,7 +474,7 @@ An index lets MongoDB find documents without reading the whole collection. Every
 | `refresh_tokens` | `{ expiresAt: 1 }` (`expiresAt_1`), `expireAfterSeconds: 0` | **TTL** | The TTL monitor, about once a minute | Deletes each token once it has expired |
 | `counters` | `_id` only | automatic | `findOneAndUpdate({ _id: 'patientCode' }, { $inc: { seq: 1 } }, { upsert: true })` | Atomic sequence numbers |
 
-There is **no text index**. A text index matches whole words and their stems, not prefixes, so it can't answer "names starting with *ash*" while someone types. A lowercase copy with an anchored regex (`/^ash/`) on an ordinary index can.
+There is **no text index**. A text index matches whole words and their stems, never the start of a word, so it can't answer "names with a word starting *ras*" while someone types. An array of each name's words, with an anchored regex (`/^ras/`) per typed word on an ordinary multikey index, can. Existing documents get their words from `npm run backfill:name-words`.
 
 ### The partial unique index on `{ doctorId, date, slotStart }`
 
@@ -612,7 +621,7 @@ flowchart TD
 
 ## 10. Query optimization strategy
 
-**How these numbers were measured.** Every list and search shape was built the way the services build it, and run with `explain("executionStats")` against the manual-QA database on Atlas (MongoDB 8). At that point it held 155 appointments, 43 patients, 4 doctors and 5 departments. A first measurement, before the sort indexes, used a local MongoDB 8.2.6 with 43,260 generated appointments; its results are kept below to show the change. The script is `qa/explain-all.mjs` in the manual QA tooling, and the server test `query-plans.test.ts` checks the shape of each unfiltered plan on every run.
+**How these numbers were measured.** Every list and search shape was built the way the services build it, and run with `explain("executionStats")` against the manual-QA database on Atlas (MongoDB 8). At that point it held 155 appointments, 43 patients, 4 doctors and 5 departments, with word search in place. A first measurement, before the sort indexes, used a local MongoDB 8.2.6 with 43,260 generated appointments; its results are kept below to show the change. The script is `qa/explain-all.mjs` in the manual QA tooling, and the server test `query-plans.test.ts` checks the shape of each unfiltered plan on every run.
 
 **How to read the table.**
 
@@ -642,8 +651,8 @@ Every list page returns 20 rows.
 | appointments: list: department | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 43 | 43 | 20 | COUNT_SCAN |
 | appointments: list: date range only | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | COUNT_SCAN |
 | appointments: list: single day | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 17 | 17 | 17 | COUNT_SCAN |
-| appointments: list: patient name "asha" | `patientNameLower_1__id_1` | SORT ← FETCH ← IXSCAN | 23 | 22 | 20 | IXSCAN |
-| appointments: list: patient name "rao asha" | `patientNameLower_1__id_1` | SORT ← FETCH ← IXSCAN | 1 | 0 | 0 | IXSCAN |
+| appointments: list: patient name "asha" | `patientNameWords_1` | SORT ← FETCH ← IXSCAN | 23 | 22 | 20 | IXSCAN |
+| appointments: list: patient name "rao asha" | `patientNameWords_1` | SORT ← FETCH ← IXSCAN | 23 | 22 | 20 | IXSCAN |
 | appointments: list: mobile prefix | `patientMobile_1` | SORT ← FETCH ← IXSCAN | 34 | 33 | 20 | IXSCAN |
 | appointments: list: doctorId (also a doctor's own list) | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 43 | 43 | 20 | COUNT_SCAN |
 | appointments: list: doctorName -> doctorId $in | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 43 | 43 | 20 | COUNT_SCAN |
@@ -653,9 +662,9 @@ Every list page returns 20 rows.
 | appointments: schedule guard: appointments still to happen | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 45 | 45 | 20 | IXSCAN |
 | patients: search: patient code | `patientCode_1` | SORT ← FETCH ← IXSCAN | 1 | 1 | 1 | EXPRESS_IXSCAN |
 | patients: search: mobile prefix | `mobile_1` | SORT ← FETCH ← IXSCAN | 4 | 3 | 3 | IXSCAN |
-| patients: search: name "asha" | `nameLower_1__id_1` | LIMIT ← FETCH ← IXSCAN | 2 | 1 | 1 | IXSCAN |
-| patients: search: name "rao" | `nameLower_1__id_1` | LIMIT ← FETCH ← IXSCAN | 1 | 0 | 0 | IXSCAN |
-| patients: search: name "rao asha" | `nameLower_1__id_1` | LIMIT ← FETCH ← IXSCAN | 1 | 0 | 0 | IXSCAN |
+| patients: search: name "asha" | `nameWords_1` | SORT ← FETCH ← IXSCAN | 2 | 1 | 1 | IXSCAN |
+| patients: search: name "rao" | `nameWords_1` | SORT ← FETCH ← IXSCAN | 3 | 2 | 2 | IXSCAN |
+| patients: search: name "rao asha" | `nameWords_1` | SORT ← FETCH ← IXSCAN | 2 | 1 | 1 | IXSCAN |
 | patients: search: mobile duplicates (exact number) | `mobile_1` | SORT ← FETCH ← IXSCAN | 3 | 2 | 2 | IXSCAN |
 | patients: list: no search term | `nameLower_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
 | doctors: list: no filter, sorted by name | `name_1` | LIMIT ← FETCH ← IXSCAN | 4 | 4 | 4 | estimatedDocumentCount (metadata) |
@@ -690,11 +699,11 @@ A filter that a selective index answers (a patient name or mobile prefix, a pati
 - **Equality and date filters** (`status`, `departmentId`, `doctorId`, `dateFrom` and `dateTo`) are answered by the compound indexes that start with them. The planner may also walk the `{ date, slotStart, _id }` index and filter as it goes when that reads less.
 - **The slot grid is the cheapest query:** a doctor's day on `{ doctorId, date }`, 12 keys for 12 appointments.
 - **The schedule-change check** (appointments still to happen, see [Why the schedule is embedded](#why-the-schedule-is-embedded-in-the-doctor)) is one indexed query per change.
-- **Every list uses `.lean()`** and `Promise.all` to run the page query and the count together. The appointment list leaves out `patientNameLower` and `__v` with a projection.
+- **Every list uses `.lean()`** and `Promise.all` to run the page query and the count together. The appointment list leaves out `patientNameLower`, `patientNameWords` and `__v` with a projection.
 
 ## 11. Scaling to millions of appointments
 
-**Size today, measured.** On the measured dataset, one appointment averages about **440 bytes** of BSON. The 8 indexes it had then (`_id` and 7 more) took about **94 bytes per appointment** together, from 10 bytes for `status_1_date_1` to 17 bytes for `uniq_active_doctor_slot` (WiredTiger compresses index keys). The sort indexes added after manual QA bring the count to 11. An estimate, not a measurement: each new index costs about the same as the existing ones, so about **140 bytes per appointment** in all, roughly half as much again as the figures below:
+**Size today, measured.** On the measured dataset, one appointment averages about **440 bytes** of BSON. The 8 indexes it had then (`_id` and 7 more) took about **94 bytes per appointment** together, from 10 bytes for `status_1_date_1` to 17 bytes for `uniq_active_doctor_slot` (WiredTiger compresses index keys). The sort and word indexes added after manual QA bring the count to 12. An estimate, not a measurement: each new index costs about the same as the existing ones, so about **150 bytes per appointment** in all, roughly half as much again as the figures below:
 
 | Appointments | Documents (before compression) | Indexes |
 | ---: | ---: | ---: |

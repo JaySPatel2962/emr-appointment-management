@@ -9,6 +9,7 @@ import { mobileSearchPrefix } from '#app/utils/mobile.js';
 import { pageSkip, toPage } from '#app/utils/pagination.js';
 import type { Page } from '#app/utils/pagination.js';
 import { formatPatientCode } from '#app/utils/patient-code.js';
+import { wordPrefixFilter } from '#app/utils/name-words.js';
 import { prefixRegex } from '#app/utils/regex.js';
 import type { NewPatientInput, SearchPatientsQuery } from '#app/validators/patient.validators.js';
 
@@ -45,8 +46,9 @@ export const toPatientDto = (patient: PatientRecord): PatientDto => ({
 });
 
 /**
- * Reads a search term as a patient code ("PAT-000042"), the start of a mobile number, or the
- * start of a name. Each case is an exact or anchored match on an indexed field.
+ * Reads a search term as a patient code ("PAT-000042"), the start of a mobile number, or words
+ * that each start a word of the name, in any order ("rao asha"). Each is an exact or anchored
+ * match on an indexed field.
  */
 const patientSearchFilter = (term: string): QueryFilter<Patient> => {
   if (PATIENT_CODE_TERM.test(term)) {
@@ -55,7 +57,7 @@ const patientSearchFilter = (term: string): QueryFilter<Patient> => {
   if (MOBILE_TERM.test(term)) {
     return { mobile: prefixRegex(mobileSearchPrefix(term)) };
   }
-  return { nameLower: prefixRegex(term.toLowerCase()) };
+  return wordPrefixFilter('nameWords', term);
 };
 
 export const searchPatients = async (query: SearchPatientsQuery): Promise<Page<PatientDto>> => {

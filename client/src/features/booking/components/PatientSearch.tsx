@@ -69,7 +69,7 @@ export const PatientSearch = ({ selected, onSelect, onRegister, error }: Patient
     <div className="flex flex-col gap-3">
       <FormField
         label="Find the patient"
-        hint="Their patient ID (PAT-000042), the start of their mobile number, or the start of their name"
+        hint="Their patient ID (PAT-000042), the start of their mobile number, or the start of any of their names"
         error={error}
       >
         {(control) => (

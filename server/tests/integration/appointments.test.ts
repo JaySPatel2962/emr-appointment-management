@@ -469,6 +469,10 @@ describe('GET /api/v1/appointments', () => {
     const auth = list.receptionist;
 
     expect(await patientNames(auth, { patientName: 'asha' })).toEqual(['Asha Rao', 'Asha Iyer']);
+    // Any word of the name, in any order (manual QA, Q-03).
+    expect(await patientNames(auth, { patientName: 'iyer' })).toEqual(['Asha Iyer']);
+    expect(await patientNames(auth, { patientName: 'rao asha' })).toEqual(['Asha Rao']);
+    expect(await patientNames(auth, { patientName: '--' })).toEqual([]);
     expect(await patientNames(auth, { mobile: '+91 98765' })).toEqual(['Asha Rao']);
     expect(await patientNames(auth, { status: 'CANCELLED' })).toEqual(['Bhavna Shah']);
     expect(await patientNames(auth, { departmentId: list.dermatology._id.toString() })).toEqual([

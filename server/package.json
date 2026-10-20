@@ -20,6 +20,7 @@
     "start": "node dist/server.js",
     "seed": "tsx --conditions=development src/scripts/seed.ts",
     "indexes:sync": "tsx --conditions=development src/scripts/sync-indexes.ts",
+    "backfill:name-words": "tsx --conditions=development src/scripts/backfill-name-words.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

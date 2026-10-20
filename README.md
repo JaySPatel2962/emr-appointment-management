@@ -37,6 +37,7 @@ npm run dev
 | `npm start` | Runs the compiled build |
 | `npm run seed` | Creates the first Super Admin and the departments from env vars |
 | `npm run indexes:sync` | Makes the database's indexes match the models, dropping replaced ones. Run once after upgrading. |
+| `npm run backfill:name-words` | Fills in the searchable name words of patients and appointments saved before word search. Run once after upgrading; safe to repeat. |
 | `npm run secrets` | Generates any missing JWT secret in `.env`, without printing it |
 | `npm run lint` | ESLint (type-aware) |
 | `npm run format` | Prettier |
@@ -180,7 +181,7 @@ Errors have `success: false` and `data: null`. `meta.requestId` matches the `X-R
 | `GET` | `/api/v1/doctors/:id` | any role | One doctor with their schedule. A doctor can only fetch their own profile. |
 | `PUT` | `/api/v1/doctors/:id/schedule` | Super Admin | Replaces the weekly schedule, and optionally the slot length |
 | `GET` | `/api/v1/slots?doctorId=&date=` | any role | A doctor's slots for one date, each `AVAILABLE`, `BOOKED` (with the appointment id) or `PAST`. Optional `departmentId`. Past dates are rejected, and a doctor can only see their own slots. |
-| `GET` | `/api/v1/patients?search=` | Super Admin, Receptionist | Search by patient code, the start of a mobile number or the start of a name. Without `search`, every patient, sorted by name. Paginated. |
+| `GET` | `/api/v1/patients?search=` | Super Admin, Receptionist | Search by patient code, the start of a mobile number, or the start of any word of the name. Without `search`, every patient, sorted by name. Paginated. |
 | `POST` | `/api/v1/appointments` | Super Admin, Receptionist | Books a slot for an existing patient (`patientId`) or registers a new one (`newPatient`) |
 | `GET` | `/api/v1/appointments` | any role | Filtered, sorted and paginated list (see below). A doctor sees only their own appointments. |
 | `GET` | `/api/v1/appointments/:id` | any role | One appointment with the patient's details |

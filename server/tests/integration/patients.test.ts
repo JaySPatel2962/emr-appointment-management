@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 import { createApp } from '#app/app.js';
 import { ROLES } from '#app/constants/roles.js';
+import { PatientModel } from '#app/models/patient.model.js';
+import { backfillNameWords } from '#app/services/name-words-backfill.service.js';
 
 import { authorizationFor } from '../helpers/auth.js';
 import { createDoctor, createPatient, createUser } from '../helpers/factories.js';
@@ -41,6 +43,38 @@ describe('GET /api/v1/patients', () => {
     expect(await namesFor(receptionist, 'pat-000042')).toEqual(['Asha Rao']);
     expect(await namesFor(receptionist, '+91 98765')).toEqual(['Asha Rao', 'Ravi Shah']);
     expect(await namesFor(receptionist, 'ash')).toEqual(['Asha Rao', 'Ashok Kumar']);
+  });
+
+  // Found in manual QA (Q-03): "Rao" found nobody, because only the start of the full name matched.
+  it('finds a patient by the start of any word of the name, in any order', async () => {
+    await createPatient({ name: 'Asha Rao', mobile: '9876543210' });
+    await createPatient({ name: 'Arjun Rao', mobile: '9876543211' });
+    await createPatient({ name: 'José Álvarez', mobile: '9876543212' });
+    await createPatient({ name: "Zoë O'Brien-Smith", mobile: '9876543213' });
+    const receptionist = authorizationFor(await createUser(ROLES.RECEPTIONIST));
+
+    expect(await namesFor(receptionist, 'Rao')).toEqual(['Arjun Rao', 'Asha Rao']);
+    expect(await namesFor(receptionist, 'rao asha')).toEqual(['Asha Rao']);
+    expect(await namesFor(receptionist, 'Asha Rao')).toEqual(['Asha Rao']);
+    expect(await namesFor(receptionist, 'a r')).toEqual(['Arjun Rao', 'Asha Rao']);
+    expect(await namesFor(receptionist, 'jose')).toEqual(['José Álvarez']);
+    expect(await namesFor(receptionist, 'Álv')).toEqual(['José Álvarez']);
+    expect(await namesFor(receptionist, 'smith')).toEqual(["Zoë O'Brien-Smith"]);
+    expect(await namesFor(receptionist, 'sha')).toEqual([]);
+  });
+
+  it('fills in the name words of patients and appointments saved before word search', async () => {
+    const asha = await createPatient({ name: 'Asha Rao' });
+    await PatientModel.collection.updateOne({ _id: asha._id }, { $unset: { nameWords: '' } });
+    const receptionist = authorizationFor(await createUser(ROLES.RECEPTIONIST));
+    expect(await namesFor(receptionist, 'rao')).toEqual([]);
+
+    const first = await backfillNameWords();
+    const again = await backfillNameWords();
+
+    expect(first.patients).toEqual({ checked: 1, updated: 1 });
+    expect(again.patients).toEqual({ checked: 1, updated: 0 });
+    expect(await namesFor(receptionist, 'rao')).toEqual(['Asha Rao']);
   });
 
   // Found in manual QA: "--" was read as a mobile number with an empty prefix, and matched all.

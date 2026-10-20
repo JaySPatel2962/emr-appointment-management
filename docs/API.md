@@ -1199,7 +1199,7 @@ Searches registered patients, sorted by name. Patients are registered by [`POST 
 
 1. **A patient code** such as `PAT-000042`, in any case: an exact match.
 2. **The start of a mobile number**, when it has only digits, spaces, `+`, `(`, `)`, `.` and `-`, and at least one digit. Separators and a `+91` prefix are removed first, so `+91 98765` finds `9876543210`.
-3. **The start of a name** otherwise, ignoring case: `asha` finds "Asha Rao", but `rao` does not.
+3. **Words of the name** otherwise. Each word typed must be the start of a word of the name, in any order, ignoring case and the accents of Latin letters: `rao`, `Asha Rao`, `rao asha` and `a r` all find "Asha Rao", and `jose` finds "José Álvarez". Words are split at spaces and at `-`, `.`, `,`, `'` and `/`. A term with no words, such as `--`, finds nobody.
 
 **Example request**
 
@@ -2647,7 +2647,7 @@ A page after the last one returns an empty `data` array. With no matches:
 | `doctorId` | Exact doctor | Ignored for doctors |
 | `doctorName` | Doctors whose name contains the text, ignoring case | Ignored for doctors |
 | `departmentId` | Exact department | |
-| `patientName` | Patient names that start with the text, ignoring case | `asha` finds "Asha Rao" |
+| `patientName` | Patients with a name word starting with each word typed, in any order, ignoring case and Latin accents | `rao`, `asha` and `rao asha` all find "Asha Rao" |
 | `mobile` | Patient mobile numbers that start with the digits | Separators and a leading `+91` are removed first, so `+91 98765` finds `9876543210` |
 | `dateFrom` | Appointments on or after this date | `"YYYY-MM-DD"` |
 | `dateTo` | Appointments on or before this date | `"YYYY-MM-DD"`, not before `dateFrom` |
@@ -2670,7 +2670,7 @@ curl "$BASE_URL/appointments?status=SCHEDULED&dateFrom=2026-10-19&dateTo=2026-10
 | Endpoint | Parameters | Sort order |
 | --- | --- | --- |
 | [`GET /doctors`](#get-doctors) | `departmentId`, `search` (name or specialization contains, ignoring case), `page`, `limit` | Name |
-| [`GET /patients`](#get-patients) | `search` (patient code, start of a mobile number, or start of a name), `page`, `limit` | Name, ignoring case |
+| [`GET /patients`](#get-patients) | `search` (patient code, start of a mobile number, or the start of any word of the name), `page`, `limit` | Name, ignoring case |
 | [`GET /departments`](#get-departments) | None; not paginated | Name, ignoring case |
 
 ---

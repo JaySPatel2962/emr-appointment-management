@@ -8,6 +8,7 @@ import {
   PURPOSE_MAX_LENGTH,
 } from '#app/constants/appointment.js';
 import { lowercaseCopy } from '#app/models/plugins/lowercase-copy.js';
+import { nameWordsCopy } from '#app/models/plugins/name-words-copy.js';
 import { DATE_PATTERN, TIME_PATTERN } from '#app/utils/time.js';
 
 const { ObjectId } = Schema.Types;
@@ -40,6 +41,7 @@ const appointmentSchema = new Schema(
     patientCode: { type: String, required: true },
     patientName: { type: String, required: true },
     patientNameLower: { type: String, required: true },
+    patientNameWords: { type: [String], default: [] },
     patientMobile: { type: String, required: true },
     doctorName: { type: String, required: true },
   },
@@ -47,6 +49,7 @@ const appointmentSchema = new Schema(
 );
 
 appointmentSchema.plugin(lowercaseCopy('patientName', 'patientNameLower'));
+appointmentSchema.plugin(nameWordsCopy('patientName', 'patientNameWords'));
 
 // Double-booking guard: at most one active appointment per doctor, date and start time.
 // The partial filter leaves CANCELLED appointments out of the index, so a cancelled slot can
@@ -75,8 +78,10 @@ appointmentSchema.index({ patientNameLower: 1, _id: 1 });
 appointmentSchema.index({ createdAt: 1, _id: 1 });
 appointmentSchema.index({ doctorName: 1, _id: 1 });
 appointmentSchema.index({ status: 1, _id: 1 });
-// Mobile search on the copied field: an anchored prefix match uses this index.
+// Patient search on the copied fields: anchored prefixes on the mobile number and on each word
+// of the name (a multikey index).
 appointmentSchema.index({ patientMobile: 1 });
+appointmentSchema.index({ patientNameWords: 1 });
 
 export type Appointment = InferSchemaType<typeof appointmentSchema>;
 

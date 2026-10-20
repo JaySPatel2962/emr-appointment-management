@@ -101,6 +101,7 @@ Server (run in `server/`):
 - `npm run secrets`: generate missing JWT secrets in `.env` (never printed)
 - `npm run seed`: create the first Super Admin and the departments from env vars
 - `npm run indexes:sync`: make the indexes match the models, dropping replaced ones (once after upgrading; startup only creates)
+- `npm run backfill:name-words`: fill in the name words that word search uses, for documents saved before it (once after upgrading)
 
 Client (run in `client/`):
 - Setup: `npm install`. The defaults point at the local API. To change them, copy `.env.example` to `.env.local`.
@@ -146,7 +147,7 @@ SA = Super Admin, R = Receptionist, D = Doctor.
 | `GET /doctors/:id` | all; D only self | | `Doctor` |
 | `PUT /doctors/:id/schedule` | SA | `{ schedule, slotDurationMinutes? }` | `Doctor` |
 | `GET /slots` | all; D only own | `?doctorId&date&departmentId?` | `DaySlots` |
-| `GET /patients` | SA, R | `?search&page&limit`: a patient code, the start of a mobile number, or the start of a name | `Patient[]` |
+| `GET /patients` | SA, R | `?search&page&limit`: a patient code, the start of a mobile number, or words that each start a word of the name | `Patient[]` |
 | `POST /appointments` | SA, R | `{ doctorId, date, slotStart, purpose, notes?, departmentId?, patientId }`, or `newPatient: { name, mobile, gender, dateOfBirth? }` instead of `patientId` | `Appointment` (201) |
 | `GET /appointments` | all; D only own | `?page&limit&sortBy&sortOrder&status&doctorId&doctorName&departmentId&patientName&mobile&dateFrom&dateTo` | `Appointment[]` |
 | `GET /appointments/:id` | all; D only own | | `Appointment`, with `patient` as a full `Patient` |

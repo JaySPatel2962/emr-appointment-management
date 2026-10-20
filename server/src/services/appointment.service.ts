@@ -28,6 +28,7 @@ import type { AuthUser } from '#app/types/auth.js';
 import { isDoctor, requireDoctorId } from '#app/utils/access.js';
 import { AppError } from '#app/utils/app-error.js';
 import { mobileSearchPrefix } from '#app/utils/mobile.js';
+import { wordPrefixFilter } from '#app/utils/name-words.js';
 import { getDuplicateKeyFields, isDuplicateKeyError } from '#app/utils/mongo-errors.js';
 import { toObjectId } from '#app/utils/object-id.js';
 import { pageSkip, toPage } from '#app/utils/pagination.js';
@@ -308,7 +309,7 @@ const buildListFilter = async (
     conditions.push({ date: { $lte: query.dateTo } });
   }
   if (query.patientName !== undefined) {
-    conditions.push({ patientNameLower: prefixRegex(query.patientName.toLowerCase()) });
+    conditions.push(wordPrefixFilter('patientNameWords', query.patientName));
   }
   if (query.mobile !== undefined) {
     conditions.push({ patientMobile: prefixRegex(mobileSearchPrefix(query.mobile)) });
@@ -361,7 +362,7 @@ export const listAppointments = async (
   const sort = listSort(query.sortBy, query.sortOrder);
   const [appointments, total] = await Promise.all([
     AppointmentModel.find(filter)
-      .select('-patientNameLower -__v')
+      .select('-patientNameLower -patientNameWords -__v')
       .sort(sort)
       .skip(pageSkip(query))
       .limit(query.limit)

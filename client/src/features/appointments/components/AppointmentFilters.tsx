@@ -84,7 +84,7 @@ export const AppointmentFilters = ({
           'max-md:mt-4',
         )}
       >
-        <FormField label="Patient name" hint="The start of the name">
+        <FormField label="Patient name" hint="The start of any part of the name">
           {(control) => (
             <Input
               {...control}

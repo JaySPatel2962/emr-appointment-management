@@ -75,7 +75,7 @@ Running notes, phase by phase, for writing `ENGINEERING_DECISIONS.md`. Each entr
 - **Patient codes** (`PAT-000001`) come from an atomic counter: a single `findOneAndUpdate` with `$inc` and `upsert`. Concurrent registrations always get distinct numbers (tested with 25 parallel calls). If a later step fails, a number may be skipped. That is fine for an id that only has to be unique and readable.
 - **Mobile numbers** are Indian 10-digit numbers, since the clinic is in India (`Asia/Kolkata`). Input is normalized before saving (separators, `+91`, `91` or a leading `0` removed), so search always compares like with like. They are not unique, because family members often share a phone.
 - **Case-insensitive uniqueness.** Emails are stored lowercase under a unique index. Department names use a unique index with a case-insensitive collation.
-- **Name search uses a lowercase copy** (`nameLower`, `patientNameLower`), kept up to date by a small schema plugin. An anchored prefix query such as `/^asha/` on the copy uses an index. A text index can't match prefixes, and a case-insensitive regex can't use an index efficiently.
+- **Name search matches words** (changed after manual QA, which found that "Rao" found nobody). Each name keeps an array of its words, lowercase and with Latin accents folded, in `nameWords` and `patientNameWords`, kept up to date by a small schema plugin. Each word typed must be an anchored prefix of one of them, so `rao`, `Asha Rao` and `rao asha` all find "Asha Rao" from a multikey index. A text index wouldn't do: it matches whole words, never prefixes. The lowercase copies (`nameLower`, `patientNameLower`) remain for sorting by name. `npm run backfill:name-words` fills in the words of documents saved earlier.
 - **Sensitive fields.** `passwordHash` has `select: false` and is also stripped by `toJSON`. Refresh tokens are stored only as SHA-256 hashes.
 - **Retention.** Refresh tokens have a TTL index on `expiresAt`, so MongoDB deletes them once they expire. Until then, revoked tokens stay on record so their reuse can be detected. Audit logs are append-only (`createdAt` only) and have no TTL, since medical audit trails are usually kept for years.
 - **Indexes are ready before the first request.** Startup builds every model's indexes and waits for them before the server listens, so no booking can arrive before the double-booking index exists.
@@ -94,6 +94,8 @@ Running notes, phase by phase, for writing `ENGINEERING_DECISIONS.md`. Each entr
 | patients | `{ patientCode }`, unique | Lookup by patient ID |
 | patients | `{ mobile }` | Patient search by the start of a mobile number |
 | patients | `{ nameLower, _id }` | The patient list, sorted by name |
+| patients | `{ nameWords }`, multikey | Patient search by any word of the name |
+| appointments | `{ patientNameWords }`, multikey | The list's patient filter, by any word of the name |
 | users | `{ email }`, unique | Login lookup, and one account per email |
 | doctors | `{ userId }`, unique | One profile per user; finds the doctor at login |
 | doctors | `{ departmentId, name }` | Doctor lists by department, sorted by name |
@@ -105,7 +107,7 @@ Running notes, phase by phase, for writing `ENGINEERING_DECISIONS.md`. Each entr
 | audit_logs | `{ createdAt: -1 }` | Most recent activity first |
 | audit_logs | `{ entity, entityId, createdAt: -1 }` | The history of one record, newest first |
 
-Every index exists because a query needs it, since each extra index slows writes slightly. Appointments carry ten besides `_id`, which is acceptable because they are read (lists, slot grids, searches) far more often than they are written.
+Every index exists because a query needs it, since each extra index slows writes slightly. Appointments carry eleven besides `_id`, which is acceptable because they are read (lists, slot grids, searches) far more often than they are written.
 
 **Sort indexes (added after manual QA).** Each list sort ends with `_id`, the tie-breaker that keeps pages stable. An index on the sort field alone couldn't return rows in that order, so an unfiltered list read the whole collection and sorted it in memory: 43,260 documents for a page of 20 at that size. Each sort now has an index with exactly its fields, and an unfiltered total comes from `estimatedDocumentCount()`, the collection's metadata, instead of a count. A filtered list may still sort its matches in memory: a prefix range can't also give the sort order, and reading the whole list in order to find a rare name would cost more. `npm run indexes:sync` drops the replaced indexes on an existing database, since startup only creates.
 
@@ -192,7 +194,7 @@ Every index exists because a query needs it, since each extra index slows writes
   - Sorting is allowed only on whitelisted fields (anything else is a 400), with `_id` as the final tiebreaker so pages never overlap.
   - Queries use `.lean()` and a projection, and `Promise.all` runs the page query and the count together.
 - **Audit entries** for create (plus patient registration), update (field names only, never clinical text), arrive, complete and cancel.
-- **Patient search** reads the term as a patient code (exact match), the start of a mobile number (normalized, with `+91` dropped) or the start of a name. Each is answered from an index.
+- **Patient search** reads the term as a patient code (exact match), the start of a mobile number (normalized, with `+91` dropped; a digit needed) or words that each start a word of the name, in any order. Each is answered from an index.
 - **Tests wait for the indexes,** as the server does at startup. A unique-email test once passed only because the index build happened to finish first. The test setup now waits for every index before any test runs, and the suite passed three runs in a row.
 
 ## Phase 7: Real-time updates
@@ -597,7 +599,7 @@ Made without a specific instruction. Each is a small change if the clinic wants 
 - Another doctor's records answer 404; another doctor's slot grid answers 403 (Phases 4 to 6).
 - Audit writes are best effort and never fail the user's action (Phase 3).
 - Socket.IO events never include clinical notes (Phase 7).
-- Doctor search is a "contains" match on name and specialization; patient search is a prefix match (Phases 4 and 6).
+- Doctor search is a "contains" match on name and specialization; patient search matches the start of any word of the name (Phases 4 and 6, and manual QA).
 
 ## Known limitations and next steps
 
