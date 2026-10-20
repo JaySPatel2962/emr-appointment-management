@@ -20,18 +20,32 @@ export interface ErrorFallbackViewProps extends ErrorFallbackProps {
   homeHref?: string | undefined;
 }
 
+// Why a page's code didn't load. Offline, a missing chunk says nothing about a new version.
+const chunkProblem = (): { title: string; description: string } =>
+  navigator.onLine
+    ? {
+        title: 'A newer version is available',
+        description:
+          'The app was updated while this tab was open. Reload to get the latest version.',
+      }
+    : {
+        title: "You're offline",
+        description: 'This page needs a connection to load. Reconnect, then reload the page.',
+      };
+
 export const ErrorFallback = ({ error, reset, homeHref = '/' }: ErrorFallbackViewProps) => {
   const outdated = isChunkLoadError(error);
+  const chunk = outdated ? chunkProblem() : null;
 
   return (
     <div role="alert">
       <EmptyState
         icon={TriangleAlert}
         headingLevel={1}
-        title={outdated ? 'A newer version is available' : "This page didn't load"}
+        title={chunk ? chunk.title : "This page didn't load"}
         description={
-          outdated
-            ? 'The app was updated while this tab was open. Reload to get the latest version.'
+          chunk
+            ? chunk.description
             : 'Something unexpected happened while showing this page. Try again, or go back to the dashboard.'
         }
         action={

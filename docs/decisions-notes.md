@@ -315,7 +315,7 @@ Every index exists because a query needs it, since each extra index slows writes
   - The navigation is built from the same role lists (`ROUTE_ACCESS`), so a link and its guard can't disagree.
 - **Errors while rendering.**
   - An `ErrorBoundary` around the page outlet keeps the navigation usable when a page crashes, and resets when the route changes.
-  - A failed chunk load (a deploy while the tab was open) offers to reload the page.
+  - A failed chunk load (a deploy while the tab was open) offers to reload the page. Offline, the same failure says so ("You're offline") instead of claiming an update; manual QA found the misleading message.
   - The router's `errorElement` catches anything that gets past both.
 - **Accessibility foundations.**
   - A skip link, and on navigation focus moves to `<main>` and the tab title changes.
