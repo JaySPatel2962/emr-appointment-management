@@ -7,6 +7,10 @@ export const CONFLICT_CODES = {
   SCHEDULE_STALE: 'SCHEDULE_STALE',
   /** The schedule would leave booked appointments without their slots. */
   APPOINTMENTS_STRANDED: 'APPOINTMENTS_STRANDED',
+  /** The doctor's schedule changed while a booking was being saved, and took its slot away. */
+  SCHEDULE_CHANGED: 'SCHEDULE_CHANGED',
+  /** A transaction lost to a concurrent change twice; trying again usually works. */
+  CONCURRENT_UPDATE: 'CONCURRENT_UPDATE',
 } as const;
 
 export type ConflictCode = (typeof CONFLICT_CODES)[keyof typeof CONFLICT_CODES];

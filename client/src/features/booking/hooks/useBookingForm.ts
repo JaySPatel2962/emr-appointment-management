@@ -5,16 +5,15 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 
 import { toast } from '@/components/feedback/toast-store';
-import { HTTP_STATUS } from '@/constants/http';
 import { createAppointment } from '@/features/appointments/api';
 import { syncAppointment } from '@/features/appointments/cache';
 import { bookingSchema, EMPTY_BOOKING } from '@/features/booking/schemas';
 import type { BookingFormOutput, BookingFormValues } from '@/features/booking/schemas';
 import { bookingFieldPath, toCreateAppointmentBody } from '@/features/booking/utils/booking-body';
+import { bookingFailure } from '@/features/booking/utils/booking-failure';
 import { patientKeys } from '@/features/patients/queries';
 import { slotKeys } from '@/features/slots/queries';
 import { schedulerLink } from '@/features/slots/utils/slot-search';
-import { hasStatus } from '@/services/api-error';
 import { formatDateShort } from '@/utils/date';
 import { applyServerFieldErrors } from '@/utils/form-errors';
 
@@ -51,17 +50,13 @@ export const useBookingForm = ({ doctorId, date, slot, onSlotLost }: UseBookingF
       void navigate(schedulerLink(appointment.doctor.id, appointment.date));
     },
     onError: (error, request) => {
-      const taken = hasStatus(error, HTTP_STATUS.CONFLICT);
-      if (taken || hasStatus(error, HTTP_STATUS.UNPROCESSABLE)) {
+      const failure = bookingFailure(error, request.slotStart);
+      if (failure.kind === 'slot') {
         void queryClient.invalidateQueries({
           queryKey: slotKeys.day(request.doctorId, request.date),
         });
         onSlotLost();
-        setSlotProblem(
-          taken
-            ? `Someone else booked ${request.slotStart} a moment ago. Choose another time.`
-            : `${error.message}. Choose another time.`,
-        );
+        setSlotProblem(failure.message);
         return;
       }
       applyServerFieldErrors(error, form.setError, bookingFieldPath);
@@ -82,11 +77,7 @@ export const useBookingForm = ({ doctorId, date, slot, onSlotLost }: UseBookingF
     submitting: mutation.isPending,
     /** A failure that isn't about the slot or a single field. */
     error:
-      mutation.error &&
-      !hasStatus(mutation.error, HTTP_STATUS.CONFLICT) &&
-      !hasStatus(mutation.error, HTTP_STATUS.UNPROCESSABLE)
-        ? mutation.error
-        : null,
+      mutation.error && bookingFailure(mutation.error, '').kind === 'other' ? mutation.error : null,
     slotProblem,
     /** Submitted without a time: say so next to the slots. */
     slotMissing: form.formState.isSubmitted && (doctorId === null || slot === null),

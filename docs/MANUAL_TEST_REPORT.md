@@ -504,6 +504,17 @@ Dr. Tara Bhatt's week was at `scheduleVersion` 1 at the start. Two admin windows
 | R3-01e | A save with an old version (10), and one with no version | 409, and 400 | `409` with `meta.scheduleVersion` 13. `400`: `body.scheduleVersion` "Send the scheduleVersion of the schedule being changed". | PASS | Version unchanged at 13 |
 | R3-01f | Console and network in both windows | Clean | Nothing, apart from window 2's expected 409 | PASS | |
 
+### R3-02: A schedule edit racing a booking, and transactions under contention
+
+Rerun after the change that makes every refusal in this race a 409 with a retry message, and runs a transaction once more after a transient error. Dr. Kabir Malhotra again, through the API. Every response was checked for a status below 500 and a readable message, and the API log for the run was scanned.
+
+| ID | Steps | Expected | Actual | Result | DB evidence |
+| --- | --- | --- | --- | --- | --- |
+| R3-02a | 20 rounds: an edit that removes Wednesday afternoon (sent with the current version) and a booking of Wed 28 Oct 14:00, at the same moment. The edit is undone or the booking cancelled after each round. | Never both saved; every refusal a clean 409 with a retry message | Edit `409` and booking `409`: 17 rounds. Edit `200` and booking `409`: 2. Edit `409` and booking `201`: 1. Both saved: never. No response was 5xx or lacked a message. The refusals: `409 APPOINTMENTS_STRANDED` "A booking was made for a time this change removes while it was being saved. Nothing was changed; check it, then try again." and `409 SCHEDULE_CHANGED` "The doctor's schedule changed while this was being booked. Check the free times and try again." When both are fired together, both usually back out; either can be sent again. | PASS | 0 active bookings left at Wed 14:00 |
+| R3-02b | 10 new-patient bookings of Thu 29 Oct 10:00 at the same moment | One booking and one patient; the rest refused cleanly | `201` once, `409 Slot already booked` nine times | PASS | 1 active appointment in the slot; 1 new patient |
+| R3-02c | The API log for R3-02a and R3-02b | No error, no 500 | 55 requests: 0 ERROR lines, 0 5xx, 46 409s | PASS | |
+| R3-02d | After retries were made visible in the log: 3 more rounds of 10 new-patient bookings of one slot (Thu 10:20, 10:40, 13:00) | One booking per slot; every refusal a clean 409 | Each round: `201` once and `409` nine times. The refusals were "Slot already booked" and, twice, "This could not be saved because of a change made at the same moment. Try again.". The log shows 22 transactions that lost a write conflict and ran once more, and 2 that lost again and answered that 409. 0 ERROR lines, 0 5xx. | PASS | 1 active appointment and 1 new patient per slot |
+
 ## Bugs
 
 BUG-01 to BUG-09 were found in the first pass, and BUG-10 to BUG-12 in the R2 retest. All twelve are fixed, each in its own commit with a regression test. Each fix was retested against the running app ("Retest"), and each regression test was confirmed to fail without its fix.

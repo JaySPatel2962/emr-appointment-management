@@ -7,6 +7,7 @@ import { AppointmentModel } from '#app/models/appointment.model.js';
 import { DoctorModel } from '#app/models/doctor.model.js';
 import { PatientModel } from '#app/models/patient.model.js';
 import * as scheduleFit from '#app/services/schedule-fit.service.js';
+import { SCHEDULE_CHANGED_WHILE_BOOKING } from '#app/services/appointment.service.js';
 import * as slotService from '#app/services/slot.service.js';
 
 import { authorizationFor } from '../helpers/auth.js';
@@ -58,6 +59,10 @@ describe('a booking and a schedule change at the same moment', () => {
       .send({ schedule: FULL_WEEK_SCHEDULE, slotDurationMinutes: 20, scheduleVersion: 0 });
 
     expect(res.status).toBe(409);
+    expect(bodyOf(res).message).toBe(
+      'A booking was made for a time this change removes while it was being saved. Nothing was changed; check it, then try again.',
+    );
+    expect(bodyOf(res).meta).toMatchObject({ code: 'APPOINTMENTS_STRANDED' });
     const saved = await DoctorModel.findById(doctor._id).lean();
     expect(saved?.slotDurationMinutes).toBe(15);
     expect(saved?.scheduleVersion).toBe(2); // saved once, then put back
@@ -82,8 +87,10 @@ describe('a booking and a schedule change at the same moment', () => {
         newPatient: { name: 'Ravi Kumar', mobile: '9123456780', gender: 'MALE' },
       });
 
-    expect(res.status).toBe(422);
-    expect(bodyOf(res).message).toBe("This time is not a slot in the doctor's schedule");
+    // A clean conflict with a retry message, not a 500 and not the 422 for a slot never offered.
+    expect(res.status).toBe(409);
+    expect(bodyOf(res).message).toBe(SCHEDULE_CHANGED_WHILE_BOOKING);
+    expect(bodyOf(res).meta).toMatchObject({ code: 'SCHEDULE_CHANGED' });
     expect(await AppointmentModel.countDocuments({ doctorId: doctor._id })).toBe(0);
     expect(await PatientModel.countDocuments({ name: 'Ravi Kumar' })).toBe(0);
   });

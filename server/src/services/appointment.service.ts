@@ -1,10 +1,10 @@
-import mongoose from 'mongoose';
 import type { QueryFilter, SortOrder, Types } from 'mongoose';
 
 import { APPOINTMENT_STATUS, STATUS_TRANSITIONS } from '#app/constants/appointment.js';
 import type { AppointmentStatus } from '#app/constants/appointment.js';
 import { AUDIT_ACTIONS, AUDIT_ENTITIES } from '#app/constants/audit.js';
 import type { AuditAction } from '#app/constants/audit.js';
+import { CONFLICT_CODES } from '#app/constants/conflicts.js';
 import { APPOINTMENT_EVENTS } from '#app/constants/events.js';
 import { AppointmentModel } from '#app/models/appointment.model.js';
 import type { Appointment } from '#app/models/appointment.model.js';
@@ -22,7 +22,6 @@ import {
   findSchedulingDoctor,
   isSlotStillOffered,
   resolveBookableSlot,
-  SLOT_NOT_IN_SCHEDULE,
 } from '#app/services/slot.service.js';
 import type { AuthUser } from '#app/types/auth.js';
 import { isDoctor, requireDoctorId } from '#app/utils/access.js';
@@ -31,6 +30,7 @@ import { mobileSearchPrefix } from '#app/utils/mobile.js';
 import { wordPrefixFilter } from '#app/utils/name-words.js';
 import { getDuplicateKeyFields, isDuplicateKeyError } from '#app/utils/mongo-errors.js';
 import { toObjectId } from '#app/utils/object-id.js';
+import { runInTransaction } from '#app/utils/transaction.js';
 import { pageSkip, toPage } from '#app/utils/pagination.js';
 import type { Page } from '#app/utils/pagination.js';
 import { containsRegex, prefixRegex } from '#app/utils/regex.js';
@@ -196,7 +196,7 @@ const bookNewPatient = async (
   appointmentFor: AppointmentFor,
 ): Promise<Booking> => {
   const patientCode = await reservePatientCode();
-  return mongoose.connection.transaction(async (session) => {
+  return runInTransaction(async (session) => {
     const patient = await createPatientRecord(input, patientCode, session);
     const [appointment] = await AppointmentModel.create([appointmentFor(patient)], { session });
     if (!appointment) {
@@ -215,6 +215,9 @@ const bookPatient = (input: CreateAppointmentInput, appointmentFor: AppointmentF
   }
   throw AppError.badRequest('Provide either patientId or newPatient');
 };
+
+export const SCHEDULE_CHANGED_WHILE_BOOKING =
+  "The doctor's schedule changed while this was being booked. Check the free times and try again.";
 
 export const createAppointment = async (
   input: CreateAppointmentInput,
@@ -262,7 +265,9 @@ export const createAppointment = async (
     if (booking.newPatient) {
       await PatientModel.deleteOne({ _id: booking.newPatient._id });
     }
-    throw AppError.unprocessable(SLOT_NOT_IN_SCHEDULE);
+    throw AppError.conflict(SCHEDULE_CHANGED_WHILE_BOOKING, {
+      code: CONFLICT_CODES.SCHEDULE_CHANGED,
+    });
   }
 
   if (booking.newPatient) {

@@ -5,7 +5,12 @@ import { ZodError } from 'zod';
 import { HTTP_STATUS } from '#app/constants/http.js';
 import { AppError } from '#app/utils/app-error.js';
 import type { ErrorDetail } from '#app/utils/app-error.js';
-import { getDuplicateKeyFields, isDuplicateKeyError } from '#app/utils/mongo-errors.js';
+import {
+  getDuplicateKeyFields,
+  isDuplicateKeyError,
+  isTransientTransactionError,
+} from '#app/utils/mongo-errors.js';
+import { concurrentUpdateError } from '#app/utils/transaction.js';
 
 /** What the error handler sends for a thrown value. */
 export interface HttpError {
@@ -73,6 +78,11 @@ export const toHttpError = (error: unknown): HttpError => {
         ? `A record with the same ${fields.join(', ')} already exists`
         : 'Duplicate record';
     return expectedError(HTTP_STATUS.CONFLICT, message);
+  }
+  // A write conflict that reached here outside runInTransaction: still a conflict to retry,
+  // never a 500 with the driver's message.
+  if (isTransientTransactionError(error)) {
+    return toHttpError(concurrentUpdateError());
   }
   if (error instanceof mongoose.Error.CastError) {
     return expectedError(HTTP_STATUS.BAD_REQUEST, `Invalid value for ${error.path}`);

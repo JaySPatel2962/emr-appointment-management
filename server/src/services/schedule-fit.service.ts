@@ -70,11 +70,26 @@ export const findStrandedAppointments = async (
     }));
 };
 
-/** The 409 that refuses a schedule change, listing the appointments it would strand. */
-export const strandedAppointmentsError = (stranded: readonly StrandedAppointment[]): AppError =>
-  AppError.conflict(
-    stranded.length === 1
-      ? 'This schedule would leave 1 booked appointment without its slot'
-      : `This schedule would leave ${String(stranded.length)} booked appointments without their slots`,
-    { code: CONFLICT_CODES.APPOINTMENTS_STRANDED, appointments: stranded },
-  );
+const strandedMessage = (count: number, duringSave: boolean): string => {
+  if (duringSave) {
+    return count === 1
+      ? 'A booking was made for a time this change removes while it was being saved. Nothing was changed; check it, then try again.'
+      : `${String(count)} bookings were made for times this change removes while it was being saved. Nothing was changed; check them, then try again.`;
+  }
+  return count === 1
+    ? 'This schedule would leave 1 booked appointment without its slot'
+    : `This schedule would leave ${String(count)} booked appointments without their slots`;
+};
+
+/**
+ * The 409 that refuses a schedule change, listing the appointments it would strand. With
+ * `duringSave`, they were booked while the change was being saved, so the change was undone.
+ */
+export const strandedAppointmentsError = (
+  stranded: readonly StrandedAppointment[],
+  { duringSave = false }: { duringSave?: boolean } = {},
+): AppError =>
+  AppError.conflict(strandedMessage(stranded.length, duringSave), {
+    code: CONFLICT_CODES.APPOINTMENTS_STRANDED,
+    appointments: stranded,
+  });

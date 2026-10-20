@@ -1060,7 +1060,7 @@ curl -X PUT "$BASE_URL/doctors/6ad4b1a4c42b65083c36c4e6/schedule" \
 | 409 | `The schedule changed since you opened it. Reload to see the latest.` | `scheduleVersion` is not the current one: someone saved the schedule since it was read. `meta.code` is `SCHEDULE_STALE` and `meta.scheduleVersion` the current version. Nothing is saved. Checked before the appointments. |
 | 409 | `This schedule would leave <n> booked appointment(s) without their slot(s)` | The new grid has no slot with the same date, start and end for a SCHEDULED or ARRIVED appointment dated today or later. `meta.code` is `APPOINTMENTS_STRANDED`, and `meta.appointments` lists them. Nothing is saved. |
 
-A change saved at the same moment as a booking for a slot it removes is caught too. The change re-checks the appointments once saved, and puts the previous schedule back if a booking it missed would be stranded. The booking re-checks its slot once saved, and is undone with `422` if the slot is gone.
+A change saved at the same moment as a booking for a slot it removes is caught too. The change re-checks the appointments once saved, and if a booking it missed would be stranded, it puts the previous schedule back and answers `409` "A booking was made for a time this change removes while it was being saved. Nothing was changed; check it, then try again." (`meta.code` `APPOINTMENTS_STRANDED`, with the list). The booking re-checks its slot once saved, and if the slot is gone it is undone with `409` (see [POST /appointments](#post-appointments)). Both can be refused when they land at exactly the same moment; never both saved. Either can simply be sent again.
 
 <details>
 <summary>Example error responses</summary>
@@ -1570,9 +1570,10 @@ curl -X POST "$BASE_URL/appointments" \
 | 404 | `Doctor not found` | No doctor with `doctorId` |
 | 404 | `Patient not found` | No patient with `patientId` |
 | 409 | `Slot already booked` | Another active appointment holds this doctor, date and start time (see [section 6](#6-concurrency)) |
+| 409 | `The doctor's schedule changed while this was being booked. Check the free times and try again.` | A schedule change saved during this booking removed the slot. The booking is undone, along with a patient it registered. `meta.code` is `SCHEDULE_CHANGED`. |
+| 409 | `This could not be saved because of a change made at the same moment. Try again.` | A new patient's booking lost a write conflict with a concurrent transaction twice: it is retried once on the server first. Nothing is saved, and the same request can be sent again. `meta.code` is `CONCURRENT_UPDATE`. |
 | 422 | `This time is not a slot in the doctor's schedule` | `slotStart` is not the start of a slot that day: the doctor's day off, a break, outside working hours, or off the slot grid |
 | 422 | `This slot is in the past` | The slot has already started in the clinic's timezone |
-| 422 | `This time is not a slot in the doctor's schedule` | Also when a schedule change saved during this booking removed the slot. The booking is then undone, along with a patient it registered. |
 | 422 | `The doctor does not belong to this department` | `departmentId` is not the doctor's department |
 
 <details>
@@ -2630,7 +2631,7 @@ The booking for "Palpitations" got `201 Created` and became appointment `6ad4b1a
 ```
 
 - **On a 409, reload the slot grid** with `GET /slots` and let the user pick another slot. Clients following the doctor's Socket.IO room get `appointment:created` for the winning booking.
-- **A new patient's booking** creates the patient and the appointment in one transaction. If the slot is taken, the transaction is rolled back and no patient record is left behind.
+- **A new patient's booking** creates the patient and the appointment in one transaction. If the slot is taken, the transaction is rolled back and no patient record is left behind. A transaction that loses a write conflict to a concurrent one (a transient error) is run once more; if it loses again, the answer is `409 This could not be saved because of a change made at the same moment. Try again.` with `meta.code` `CONCURRENT_UPDATE`. A driver or transaction error never reaches the client as a 500.
 - **Cancelling frees the slot at once**, because cancelled appointments are not in the unique index.
 - **Status changes are atomic too.** Two simultaneous cancellations of one appointment give one `200` and one `409 This appointment is cancelled and cannot be cancelled`.
 - **Refresh tokens can be used once.** Of two simultaneous refreshes with the same cookie, only one succeeds.
@@ -2884,7 +2885,7 @@ interface ClientToServerEvents {
 | 401 | Not authenticated | `Authentication required`, `Invalid token`, `Token has expired`, `Invalid email or password`, `Refresh token missing`, `Your session has expired, please log in again` |
 | 403 | Authenticated, but the role or doctor scope doesn't allow it; or a cookie endpoint called from another site | `You do not have permission to perform this action`, `Doctors can only update consultation notes`, `Doctors can only view their own slots`, `Cross-site requests are not allowed` |
 | 404 | Not found, or outside a doctor's scope | `Doctor not found`, `Doctor not found in this department`, `Patient not found`, `Appointment not found`, `Route not found: <METHOD> <path>` |
-| 409 | Conflicts with the current state | `Slot already booked`, `This appointment is <status> and cannot be <action>`, `A record with the same email already exists`, `This schedule would leave <n> booked appointment(s) without their slot(s)` (with `meta.appointments`), `The schedule changed since you opened it. Reload to see the latest.` (with `meta.scheduleVersion`). Where a client must tell these apart, `meta.code` names the reason. |
+| 409 | Conflicts with the current state | `Slot already booked`, `This appointment is <status> and cannot be <action>`, `A record with the same email already exists`, `This schedule would leave <n> booked appointment(s) without their slot(s)` (with `meta.appointments`), `The schedule changed since you opened it. Reload to see the latest.` (with `meta.scheduleVersion`), `The doctor's schedule changed while this was being booked. Check the free times and try again.`, `This could not be saved because of a change made at the same moment. Try again.`. Where a client must tell these apart, `meta.code` names the reason: `SCHEDULE_STALE`, `APPOINTMENTS_STRANDED`, `SCHEDULE_CHANGED` or `CONCURRENT_UPDATE`. |
 | 413 | The body is larger than `BODY_LIMIT` (default 100 KB) | `Request body is too large` |
 | 422 | Valid input that breaks a scheduling rule | `This time is not a slot in the doctor's schedule`, `This slot is in the past`, `The doctor does not belong to this department`, `Department not found`, `Slots cannot be shown for a past date` |
 | 429 | Rate limit reached | `Too many requests, please try again later` |

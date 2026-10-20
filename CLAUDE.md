@@ -163,7 +163,7 @@ Status codes:
 - 401: missing, invalid or expired token
 - 403: the role is not allowed
 - 404: not found, including another doctor's records
-- 409: the slot is taken, the status change isn't allowed, the email is already used, a schedule change would strand bookings, or the schedule was saved by someone else since it was read (`meta.code` names the schedule conflicts)
+- 409: the slot is taken, the status change isn't allowed, the email is already used, a schedule change would strand bookings, the schedule was saved by someone else since it was read, the schedule changed while a booking was being saved, or a transaction lost to a concurrent change twice (`meta.code` names these four)
 - 422: the slot isn't offered or has started, the date is past, or the department is unknown
 - 429: rate limit
 

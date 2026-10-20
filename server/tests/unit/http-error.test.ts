@@ -54,6 +54,22 @@ describe('toHttpError', () => {
     });
   });
 
+  it('answers a write conflict with 409 "try again", not a 500 with the driver\'s message', () => {
+    const conflict = new mongoose.mongo.MongoServerError({
+      message: 'Write conflict during plan execution',
+      code: 112,
+      codeName: 'WriteConflict',
+      errorLabels: ['TransientTransactionError'],
+    });
+
+    expect(toHttpError(conflict)).toEqual({
+      statusCode: 409,
+      message: 'This could not be saved because of a change made at the same moment. Try again.',
+      meta: { code: 'CONCURRENT_UPDATE' },
+      unexpected: false,
+    });
+  });
+
   it('hides anything unexpected behind a generic 500', () => {
     expect(toHttpError(new Error('connection string leaked here'))).toEqual({
       statusCode: 500,

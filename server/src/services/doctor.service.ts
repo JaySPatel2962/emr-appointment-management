@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import type { QueryFilter, Types } from 'mongoose';
 
 import { AUDIT_ACTIONS, AUDIT_ENTITIES } from '#app/constants/audit.js';
@@ -7,6 +6,7 @@ import { ROLES } from '#app/constants/roles.js';
 import { DepartmentModel } from '#app/models/department.model.js';
 import { DoctorModel } from '#app/models/doctor.model.js';
 import type { Doctor } from '#app/models/doctor.model.js';
+import { UserModel } from '#app/models/user.model.js';
 import { recordAudit } from '#app/services/audit.service.js';
 import { getDepartmentsById, toDepartmentDto } from '#app/services/department.service.js';
 import {
@@ -22,6 +22,7 @@ import { toObjectId } from '#app/utils/object-id.js';
 import { pageSkip, toPage } from '#app/utils/pagination.js';
 import type { Page } from '#app/utils/pagination.js';
 import { containsRegex } from '#app/utils/regex.js';
+import { runInTransaction } from '#app/utils/transaction.js';
 import type { DaySchedule } from '#app/utils/schedule.js';
 import type {
   CreateDoctorInput,
@@ -151,8 +152,13 @@ export const createDoctor = async (
   }
   const account = await buildStaffAccount(input, ROLES.DOCTOR);
 
-  const doctor = await mongoose.connection.transaction(async (session) => {
-    const user = await account.save({ session });
+  const doctor = await runInTransaction(async (session) => {
+    // Created from the prepared account on each attempt: an aborted attempt's document can't
+    // be saved again.
+    const [user] = await UserModel.create([account.toObject()], { session });
+    if (!user) {
+      throw new Error('Doctor account was not created');
+    }
     const [profile] = await DoctorModel.create(
       [
         {
@@ -251,7 +257,7 @@ export const updateSchedule = async (
         $inc: { scheduleVersion: 1 },
       },
     );
-    throw strandedAppointmentsError(late);
+    throw strandedAppointmentsError(late, { duringSave: true });
   }
 
   await recordAudit({
