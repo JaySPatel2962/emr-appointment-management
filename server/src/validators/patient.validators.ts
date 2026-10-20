@@ -12,11 +12,15 @@ export const mobileSchema = z
   .transform(normalizeMobile)
   .refine(isValidMobile, 'Must be a 10-digit Indian mobile number');
 
-/** Digits as typed into a search box: a whole mobile number or the start of one. */
+/**
+ * Digits as typed into a search box: a whole mobile number or the start of one. At least one
+ * digit, because separators alone would leave an empty prefix that matches every number.
+ */
 export const mobileSearchSchema = z
   .string()
   .trim()
-  .regex(/^\+?[\d\s().-]{1,20}$/, 'Must contain only digits');
+  .regex(/^\+?[\d\s().-]{1,20}$/, 'Must contain only digits')
+  .regex(/\d/, 'Must contain a digit');
 
 export const newPatientSchema = z.object({
   name: nameSchema,

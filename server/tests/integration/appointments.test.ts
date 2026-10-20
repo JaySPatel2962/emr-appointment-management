@@ -480,6 +480,20 @@ describe('GET /api/v1/appointments', () => {
     expect(await patientNames(auth, { doctorName: 'iyer' })).toEqual(['Asha Iyer']);
   });
 
+  it('refuses a mobile filter without a digit instead of matching every appointment', async () => {
+    const list = await setUpList();
+
+    const res = await request(app)
+      .get(URL)
+      .query({ mobile: '--' })
+      .set('Authorization', list.receptionist);
+
+    expect(res.status).toBe(400);
+    expect(bodyOf(res).meta.errors).toEqual([
+      { field: 'query.mobile', message: 'Must contain a digit' },
+    ]);
+  });
+
   it('sorts by whitelisted fields only, and paginates', async () => {
     const list = await setUpList();
 

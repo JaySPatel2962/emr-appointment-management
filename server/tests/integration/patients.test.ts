@@ -43,6 +43,17 @@ describe('GET /api/v1/patients', () => {
     expect(await namesFor(receptionist, 'ash')).toEqual(['Asha Rao', 'Ashok Kumar']);
   });
 
+  // Found in manual QA: "--" was read as a mobile number with an empty prefix, and matched all.
+  it('reads separators without a digit as a name, not as a mobile number', async () => {
+    await createPatient({ name: 'Asha Rao', mobile: '9876543210' });
+    await createPatient({ name: 'Ravi Shah', mobile: '9123456789' });
+    const receptionist = authorizationFor(await createUser(ROLES.RECEPTIONIST));
+
+    for (const term of ['--', '()', '.', '+']) {
+      expect(await namesFor(receptionist, term)).toEqual([]);
+    }
+  });
+
   it('lists every patient by name, ignoring case, when there is no search term', async () => {
     await createPatient({ name: 'Zara Khan' });
     await createPatient({ name: 'asha rao' });

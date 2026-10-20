@@ -20,10 +20,12 @@ export const DEFAULT_LIST_PARAMS: AppointmentListParams = {
 export const TEXT_FILTER_MAX_LENGTH = 100;
 
 const text = z.string().trim().min(1).max(TEXT_FILTER_MAX_LENGTH).optional().catch(undefined);
+// As the API requires: digits and separators, with at least one digit.
 const mobile = z
   .string()
   .trim()
   .regex(/^\+?[\d\s().-]{1,20}$/)
+  .regex(/\d/)
   .optional()
   .catch(undefined);
 const id = z

@@ -1172,7 +1172,7 @@ Searches registered patients, sorted by name. Patients are registered by [`POST 
 `search` is read as:
 
 1. **A patient code** such as `PAT-000042`, in any case: an exact match.
-2. **The start of a mobile number**, when it has only digits, spaces, `+`, `(`, `)`, `.` and `-`. Separators and a `+91` prefix are removed first, so `+91 98765` finds `9876543210`.
+2. **The start of a mobile number**, when it has only digits, spaces, `+`, `(`, `)`, `.` and `-`, and at least one digit. Separators and a `+91` prefix are removed first, so `+91 98765` finds `9876543210`.
 3. **The start of a name** otherwise, ignoring case: `asha` finds "Asha Rao", but `rao` does not.
 
 **Example request**
@@ -1674,7 +1674,7 @@ Lists appointments with filters, sorting and pagination.
 | `doctorName` | string | | 1 to 100 characters. Ignored for doctors. |
 | `departmentId` | string (id) | | |
 | `patientName` | string | | 1 to 100 characters |
-| `mobile` | string | | 1 to 20 digits, spaces, `(`, `)`, `.` or `-`, with an optional leading `+` |
+| `mobile` | string | | 1 to 20 digits, spaces, `(`, `)`, `.` or `-`, with an optional leading `+` and at least one digit |
 | `dateFrom` | string | | `"YYYY-MM-DD"`, inclusive |
 | `dateTo` | string | | `"YYYY-MM-DD"`, inclusive. Not before `dateFrom`. |
 

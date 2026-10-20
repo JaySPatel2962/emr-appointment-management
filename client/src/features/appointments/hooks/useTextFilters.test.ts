@@ -70,6 +70,17 @@ describe('useTextFilters', () => {
     expect(result.current.text.mobile).toBe('abc');
   });
 
+  // Found in manual QA: separators alone matched every appointment.
+  it('sends a mobile box with separators but no digit as no filter', () => {
+    const { result, onChange, pause } = setup({ mobile: '98765' });
+    act(() => {
+      result.current.change('mobile', '--');
+    });
+    pause();
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ mobile: undefined });
+  });
+
   it('clearing empties the boxes and drops a search still waiting to be sent', () => {
     const { result, onChange, pause } = setup({ doctorName: 'Rao' });
     act(() => {

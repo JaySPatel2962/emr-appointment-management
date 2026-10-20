@@ -31,7 +31,9 @@ export interface PatientRecord {
 }
 
 const PATIENT_CODE_TERM = /^pat-\d+$/i;
-const MOBILE_TERM = /^\+?[\d\s().-]+$/;
+// Digits with separators, and at least one digit: separators alone ("--") would leave an empty
+// prefix that matches every number.
+const MOBILE_TERM = /^\+?[\s().-]*\d[\d\s().-]*$/;
 
 export const toPatientDto = (patient: PatientRecord): PatientDto => ({
   id: patient._id.toString(),
