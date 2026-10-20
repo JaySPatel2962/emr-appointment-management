@@ -214,4 +214,34 @@ describe('cross-site requests to the cookie endpoints', () => {
       expect(setCookieLine(res, REFRESH_COOKIE_NAME)).toBeUndefined();
     },
   );
+
+  // Sandboxed frames and some privacy modes send the literal origin "null": still another site.
+  it('refuses the origin "null"', async () => {
+    const user = await createUser(ROLES.RECEPTIONIST);
+    const { refreshCookie } = await loginAs(app, user.email);
+
+    const res = await request(app)
+      .post(LOGOUT_URL)
+      .set('Origin', 'null')
+      .set('Cookie', refreshCookie);
+
+    expect(res.status).toBe(403);
+    expect(setCookieLine(res, REFRESH_COOKIE_NAME)).toBeUndefined();
+  });
+
+  // curl, Postman and other servers send no Origin header, and carry no browser cookie that a
+  // forged request could borrow, so the check lets them through.
+  it('lets requests without an Origin header refresh and sign out', async () => {
+    const user = await createUser(ROLES.RECEPTIONIST);
+    const { refreshCookie } = await loginAs(app, user.email);
+
+    const refreshed = await request(app).post(REFRESH_URL).set('Cookie', refreshCookie);
+    expect(refreshed.status).toBe(200);
+    const loggedOut = await request(app)
+      .post(LOGOUT_URL)
+      .set('Cookie', refreshCookieFrom(refreshed));
+
+    expect(loggedOut.status).toBe(200);
+    expect(setCookieLine(loggedOut, REFRESH_COOKIE_NAME)).toMatch(/Expires=Thu, 01 Jan 1970/);
+  });
 });
