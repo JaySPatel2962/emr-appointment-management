@@ -183,6 +183,34 @@ for (const size of SIZES) {
       expect(await horizontalOverflow(page), 'schedule editor').toBe(0);
     });
 
+    // Found in the manual retest: at 768 px the list showed cards with no sort control at all,
+    // and sorting by booking time needed a screen about 1,500 px wide.
+    test('every sort can be chosen', async ({ page }) => {
+      await signIn(page.context(), ADMIN);
+      await page.goto(listPath());
+      await expect(listSummary(page)).toBeVisible();
+      // A header row turned into cards is still read out, but only 1 px of it is on screen.
+      const onScreen = await page.getByRole('columnheader').evaluateAll((cells) =>
+        cells
+          .filter((cell) => {
+            const button = cell.querySelector('button');
+            const head = cell.closest('thead');
+            return (
+              button !== null &&
+              head !== null &&
+              head.getBoundingClientRect().width > 1 &&
+              button.getBoundingClientRect().width > 1
+            );
+          })
+          .map((cell) => cell.textContent.trim()),
+      );
+      if (onScreen.length < 5) {
+        const choice = page.getByLabel('Sort by');
+        await expect(choice, `sortable headers on screen: ${onScreen.join(', ')}`).toBeVisible();
+        await expect(choice.locator('option')).toHaveCount(10);
+      }
+    });
+
     test('the navigation and the list fit the screen', async ({ page }) => {
       const { listDays } = seedInfo();
       await signIn(page.context(), ADMIN);

@@ -43,14 +43,18 @@ const sortChoice = (
   sortOrder,
 });
 
-// On phones the column headers are hidden, so sorting is offered as one choice instead.
+// Every sort the column headers offer, for widths where some or all of them don't fit.
 const SORT_CHOICES: readonly SortChoice[] = [
   sortChoice('date', 'asc', 'Date, earliest first'),
   sortChoice('date', 'desc', 'Date, latest first'),
   sortChoice('patientName', 'asc', 'Patient, A to Z'),
+  sortChoice('patientName', 'desc', 'Patient, Z to A'),
   sortChoice('doctorName', 'asc', 'Doctor, A to Z'),
-  sortChoice('status', 'asc', 'Status'),
+  sortChoice('doctorName', 'desc', 'Doctor, Z to A'),
+  sortChoice('status', 'asc', 'Status, A to Z'),
+  sortChoice('status', 'desc', 'Status, Z to A'),
   sortChoice('createdAt', 'desc', 'Booked, newest first'),
+  sortChoice('createdAt', 'asc', 'Booked, oldest first'),
 ];
 
 export const AppointmentListPage = () => {
@@ -102,7 +106,7 @@ export const AppointmentListPage = () => {
         }
       />
 
-      <div className="flex flex-col gap-4">
+      <div className="@container flex flex-col gap-4">
         <AppointmentFilters
           params={params}
           onChange={update}
@@ -110,7 +114,11 @@ export const AppointmentListPage = () => {
           showDoctorFilters={!isDoctor}
         />
 
-        <div className="md:hidden">
+        {/*
+          The table shows cards, with no headers, below 48rem, and the Booked column from 72rem
+          (inside its 1px border). Until every sortable header fits, sorting is a choice too.
+        */}
+        <div className="@min-[72.125rem]:hidden">
           <FormField label="Sort by">
             {(control) => (
               <Select

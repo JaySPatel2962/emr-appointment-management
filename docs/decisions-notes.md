@@ -413,7 +413,7 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Appointment list.**
   - The page, sort and filters live in the URL, parsed by zod with `.catch()` defaults, so a hand-edited URL falls back instead of breaking. Default values are left out of the URL, and filter changes replace the history entry.
   - Text filters wait 350 ms after typing stops; selects and dates apply at once.
-  - Sorting is done from the column headers (`aria-sort`), or from one "Sort by" choice on narrow screens, where the headers are hidden.
+  - Sorting is done from the column headers (`aria-sort`), and from one "Sort by" choice that offers all ten sorts. The choice shows until every sortable header fits, measured on the same container as the table: the table shows cards below 48rem and adds the Booked column at 72rem. It used to follow the screen width (`md`), so the manual retest found no sort control at all at 768 px, where the table was already cards, and no way to sort by booking time below about 1,500 px.
   - A page beyond the end, such as an old link after the list shrank, offers to go back to page 1.
   - Row actions come from `permissionsFor(user, appointment)`, a tested mirror of the API's rules, so only actions that would succeed are offered:
     - check in
