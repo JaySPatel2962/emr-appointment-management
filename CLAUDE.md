@@ -117,7 +117,7 @@ Client (run in `client/`):
 ## Backend status
 All backend phases are done and committed on `feat/backend`. With the later fixes on `feat/frontend`, 215 tests pass, about 93% line coverage.
 - Done: 0 tooling, 1 foundation (env, errors, security, health), 2 models and indexes, 3 auth, 4 doctors, receptionists and departments, 5 slot generation, 6 appointments and patients, 7 Socket.IO, 8 concurrency, RBAC and end-to-end tests
-- `ENGINEERING_DECISIONS.md` (repo root) answers the brief's seven questions, from `docs/decisions-notes.md`. Not done yet: the README's future section and a git remote. The frontend's progress is under Frontend status below.
+- `ENGINEERING_DECISIONS.md` (repo root) answers the brief's seven questions, from `docs/decisions-notes.md`. Not done yet: a git remote. The frontend's progress is under Frontend status below.
 - Design decisions: `docs/decisions-notes.md`
 
 ### Response shapes
@@ -234,7 +234,7 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
   - clipped times in the schedule editor on phones (R2)
   - no sort control at 768 px (R2)
 
-  Of its open questions, Q-02, Q-03, Q-06 and Q-07 were resolved by changes; Q-01, Q-04 and Q-05 are kept and listed in the README's Assumptions and Known limitations; From the retest, Q-08 was resolved by a version check on schedule saves, and Q-09 (searches sort a few dozen matches in memory) is kept. The throwaway scripts in `qa/` and `qa-credentials.local.md` are gitignored.
+  Of its open questions, Q-02, Q-03, Q-06 and Q-07 were resolved by changes; Q-01, Q-04 and Q-05 are kept and listed in the README's Assumptions and Known limitations. From the retest, Q-08 was resolved by a version check on schedule saves, and Q-09 (searches sort a few dozen matches in memory) is kept. The throwaway scripts in `qa/` and `qa-credentials.local.md` are gitignored.
 - Design decisions: the Frontend sections of `docs/decisions-notes.md`
 
 ### End-to-end tests (`client/e2e/`)
