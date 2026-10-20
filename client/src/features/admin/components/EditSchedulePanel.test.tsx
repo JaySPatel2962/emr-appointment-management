@@ -86,3 +86,35 @@ describe('EditSchedulePanel: someone else saved the schedule first', () => {
     expect(sentVersions()).toEqual([3, 4]);
   });
 });
+
+// Found while rehearsing the demo: an overlap the user had fixed kept its message until the
+// next save, because only the edited field was checked again, not the range it belongs to.
+describe('EditSchedulePanel: a problem the user fixes', () => {
+  beforeEach(() => {
+    vi.mocked(updateSchedule).mockReset();
+  });
+
+  it('clears its message as soon as the times are fixed, before another save', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<EditSchedulePanel doctor={doctorAt(3, 15)} />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a session' }));
+    await user.type(screen.getByLabelText('Monday session 2 starts'), '12:00');
+    await user.type(screen.getByLabelText('Monday session 2 ends'), '15:00');
+    await user.click(screen.getByRole('button', { name: 'Save schedule' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Sessions 09:00-13:00 and 12:00-15:00 overlap',
+    );
+    expect(updateSchedule).not.toHaveBeenCalled();
+
+    const start = screen.getByLabelText('Monday session 2 starts');
+    await user.clear(start);
+    await user.type(start, '14:00');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+    expect(updateSchedule).not.toHaveBeenCalled();
+  });
+});

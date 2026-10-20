@@ -439,6 +439,7 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Staff and schedules.** The tab and the chosen doctor are in the URL.
   - The schedule editor shows all seven days, each switched on or off, with field arrays for sessions and breaks. "Use a standard week" fills in Monday to Friday, 09:00–12:00 and 13:00–17:00 with lunch in between.
   - `findScheduleProblems` mirrors the server's schedule rules and is unit-tested. Each problem (overlapping sessions, a break outside working hours) shows on the exact range it is about.
+  - Once a day shows a problem, every edit to that day checks the whole day again (`useRecheckDayOnEdit`), so a fixed overlap loses its message right away. RHF re-checks only the edited field, and these errors belong to a range or a list, so they used to stay until the next save. A day with no message waits for the save, so half-typed times aren't flagged.
   - An API error on `body.schedule.N` is mapped from the N-th working day back to the editor's row.
   - Creating a doctor uses three separately typed forms (account, profile, schedule), validated together, with focus on the first problem in reading order. A typed form per part means no casts; the alternative was RHF's form context.
   - A taken email (409) shows on the email field. Saving a schedule refetches every cached slot grid, since the slots themselves change.

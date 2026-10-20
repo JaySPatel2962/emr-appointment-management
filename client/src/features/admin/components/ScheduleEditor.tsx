@@ -13,6 +13,7 @@ import {
   WEEK_ORDER,
   WEEKDAY_LABELS,
 } from '@/constants/doctor';
+import { useRecheckDayOnEdit } from '@/features/admin/hooks/useRecheckDayOnEdit';
 import type { ScheduleFormOutput, ScheduleFormValues } from '@/features/admin/schemas';
 import { EMPTY_RANGE, standardWeek } from '@/features/admin/utils/schedule-form';
 
@@ -176,6 +177,7 @@ export const ScheduleEditor = ({ form }: ScheduleEditorProps) => {
     formState: { errors },
     control,
   } = form;
+  useRecheckDayOnEdit(form);
   const current = useWatch({ control, name: 'slotDurationMinutes' });
   const durations = [...new Set([...SLOT_DURATION_OPTIONS.map(String), current])]
     .filter((value) => value !== '')
