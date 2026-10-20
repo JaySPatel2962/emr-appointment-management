@@ -446,16 +446,18 @@ An index lets MongoDB find documents without reading the whole collection. Every
 | `departments` | `{ name: 1 }` (`name_1`) | unique, case-insensitive collation (`en`, strength 2) | List all departments, sorted by name with the same collation; the seed script's upsert by name | Prevents "Cardiology" and "cardiology" from both existing |
 | `doctors` | `{ userId: 1 }` (`userId_1`) | unique | At login and refresh: `findOne({ userId })`, to put the doctor's id in the token | One profile per user |
 | `doctors` | `{ departmentId: 1, name: 1 }` (`departmentId_1_name_1`) | compound | Doctor list: `find({ departmentId })` sorted by `{ name: 1 }` | Filter by department and sort by name from one index |
+| `doctors` | `{ name: 1 }` (`name_1`), `{ specialization: 1 }` (`specialization_1`) | single field | The doctor list sorted by name; doctor search ("contains" on name or specialization); the appointment list's `doctorName` filter | A scan of a small index instead of the collection |
 | `patients` | `{ patientCode: 1 }` (`patientCode_1`) | unique | Search by code: `find({ patientCode: 'PAT-000042' })` | Codes are unique, and staff look patients up by them |
 | `patients` | `{ mobile: 1 }` (`mobile_1`) | single field | Search by mobile: `find({ mobile: /^98765/ })` | Anchored prefix match while typing |
-| `patients` | `{ nameLower: 1 }` (`nameLower_1`) | single field | Search by name: `find({ nameLower: /^asha/ })` | Case-insensitive prefix match using the lowercase copy |
+| `patients` | `{ nameLower: 1, _id: 1 }` (`nameLower_1__id_1`) | compound | The patient list sorted by name, with `_id` as the tie-breaker | Rows come from the index in order; no in-memory sort |
 | `appointments` | `{ doctorId: 1, date: 1, slotStart: 1 }` (`uniq_active_doctor_slot`) | **partial unique**, compound | Every booking insert; also the slot grid query `find({ doctorId, date, status: { $in: [active statuses] } })` | **Prevents double booking**. See below. |
 | `appointments` | `{ doctorId: 1, date: 1 }` (`doctorId_1_date_1`) | compound | A doctor's own list, `{ doctorId }` with an optional date range; the `doctorName` filter after it becomes `{ doctorId: { $in: [...] } }` | The partial index above can't serve queries that don't filter on status |
 | `appointments` | `{ status: 1, date: 1 }` (`status_1_date_1`) | compound | List filtered by `status`, with a date range | "Today's SCHEDULED appointments" |
 | `appointments` | `{ departmentId: 1, date: 1 }` (`departmentId_1_date_1`) | compound | List filtered by `departmentId`, with a date range | Department view |
-| `appointments` | `{ date: 1, slotStart: 1 }` (`date_1_slotStart_1`) | compound | List filtered only by `dateFrom` and `dateTo` | Date range lists. (Not used by the unfiltered default list; see [section 10](#10-query-optimization-strategy).) |
+| `appointments` | `{ date: 1, slotStart: 1, _id: 1 }` (`date_1_slotStart_1__id_1`) | compound | The default list (sorted by date and time) and lists filtered by a date range | The list in order straight from the index, forwards or backwards |
 | `appointments` | `{ patientMobile: 1 }` (`patientMobile_1`) | single field | List filter `{ patientMobile: /^98765/ }` | Mobile search on the copied field |
-| `appointments` | `{ patientNameLower: 1 }` (`patientNameLower_1`) | single field | List filter `{ patientNameLower: /^asha/ }` | Name search on the copied field |
+| `appointments` | `{ patientNameLower: 1, _id: 1 }` (`patientNameLower_1__id_1`) | compound | The list sorted by patient name | Sort without reading the whole collection |
+| `appointments` | `{ createdAt: 1, _id: 1 }`, `{ doctorName: 1, _id: 1 }`, `{ status: 1, _id: 1 }` | compound | The list sorted by booking time, doctor or status | Every sort the list offers is an index (see [section 10](#10-query-optimization-strategy)) |
 | `audit_logs` | `{ createdAt: -1 }` (`createdAt_-1`) | single field, descending | No query reads audit logs yet; only writes | Prepared for an audit screen: newest activity first |
 | `audit_logs` | `{ entity: 1, entityId: 1, createdAt: -1 }` (`entity_1_entityId_1_createdAt_-1`) | compound | No query reads audit logs yet | Prepared for "the history of one record" |
 | `refresh_tokens` | `{ tokenHash: 1 }` (`tokenHash_1`) | unique | Refresh: `findOne({ tokenHash })`; logout: `findOneAndUpdate({ tokenHash, revokedAt: { $exists: false } })` | Every refresh and logout looks a token up by its hash |
@@ -610,13 +612,7 @@ flowchart TD
 
 ## 10. Query optimization strategy
 
-**How these numbers were measured.** Atlas isn't connected yet, and the seed script creates only departments and an admin. So the plans were measured on a local MongoDB 8.2.6 loaded with a generated dataset, using the real models and indexes:
-
-- 6 departments and 30 doctors
-- 5,000 patients
-- 43,260 appointments: 120 days from 2030-01-01, Monday to Saturday, 14 of 28 slots booked per doctor per day, about 10% of them cancelled
-
-The real service functions were run with Mongoose's query capture switched on, and each captured query was run again with `explain("executionStats")`.
+**How these numbers were measured.** Every list and search shape was built the way the services build it, and run with `explain("executionStats")` against the manual-QA database on Atlas (MongoDB 8). At that point it held 155 appointments, 43 patients, 4 doctors and 5 departments. A first measurement, before the sort indexes, used a local MongoDB 8.2.6 with 43,260 generated appointments; its results are kept below to show the change. The script is `qa/explain-all.mjs` in the manual QA tooling, and the server test `query-plans.test.ts` checks the shape of each unfiltered plan on every run.
 
 **How to read the table.**
 
@@ -625,70 +621,80 @@ The real service functions were run with Mongoose's query capture switched on, a
 | **IXSCAN** | MongoDB used an index |
 | **COLLSCAN** | MongoDB read every document in the collection |
 | **SORT** | Sorted in memory after fetching |
-| **Docs examined vs returned** | How much work was done for how many results. Ideally they're close. |
+| **LIMIT ← FETCH ← IXSCAN** | Rows read from the index already in order, and the scan stops after the page |
+| **Keys / docs examined vs returned** | How much work was done for how many results. Ideally they're close. |
 
 Every list page returns 20 rows.
 
-| Query (what the service sends) | Index used | Winning plan | Docs examined | Returned |
-| --- | --- | --- | ---: | ---: |
-| **Appointment list, default:** `{ $and: [{}] }` sorted by `{ date, slotStart, _id }` | none | SORT ← **COLLSCAN** | 43,260 | 20 |
-| Appointment list, `status: 'SCHEDULED'`, one week | `status_1_date_1` | SORT ← FETCH ← IXSCAN | 1,513 | 20 |
-| Appointment list, `departmentId`, one week | `departmentId_1_date_1` | SORT ← FETCH ← IXSCAN | 420 | 20 |
-| Appointment list, one day (`dateFrom` = `dateTo`) | `date_1_slotStart_1` | SORT ← FETCH ← IXSCAN | 420 | 20 |
-| Appointment list, `patientNameLower: /^asha/` | `patientNameLower_1` | SORT ← FETCH ← IXSCAN | 2,032 | 20 |
-| Appointment list, `patientMobile: /^98765/` | `patientMobile_1` | SORT ← FETCH ← IXSCAN | 410 | 20 |
-| Appointment list, `doctorName` "mehta", step 1: `doctors.find({ name: /mehta/i })` | none | **COLLSCAN** (30 doctors) | 30 | 3 |
-| Appointment list, `doctorName` "mehta", step 2: `{ doctorId: { $in: [3 ids] } }` | `doctorId_1_date_1` | SORT ← FETCH ← IXSCAN | 4,326 | 20 |
-| **Appointment list, sorted by patient name:** `{ $and: [{}] }` sorted by `{ patientNameLower, _id }` | none | SORT ← **COLLSCAN** | 43,260 | 20 |
-| Doctor-scoped list: `{ $and: [{ doctorId }] }` | `doctorId_1_date_1` | SORT ← FETCH ← IXSCAN | 1,442 | 20 |
-| Doctor-scoped list, one week | `doctorId_1_date_1` | SORT ← FETCH ← IXSCAN | 84 | 20 |
-| Slots for a day, step 1: the doctor by `_id` | `_id_` | EXPRESS_IXSCAN | 1 | 1 |
-| Slots for a day, step 2: `{ doctorId, date, status: { $in: [active] } }` | `uniq_active_doctor_slot` | FETCH ← IXSCAN | 11 | 11 |
-| Patient search by code `PAT-000042` | `patientCode_1` | SORT ← FETCH ← IXSCAN | 1 | 1 |
-| Patient search, `mobile: /^98765/` | `mobile_1` | SORT ← FETCH ← IXSCAN | 52 | 20 |
-| Patient search, `nameLower: /^asha/` | `nameLower_1` | SORT ← FETCH ← IXSCAN | 234 | 20 |
-| **Patient list, no search term:** `{}` sorted by `{ nameLower, _id }` | none | SORT ← **COLLSCAN** | 5,000 | 20 |
-| Login: `users.findOne({ email })` | `email_1` | EXPRESS_IXSCAN | 1 | 1 |
-| Refresh: `refresh_tokens.findOne({ tokenHash })` | `tokenHash_1` | EXPRESS_IXSCAN | 1 | 1 |
+| Shape | Index | Winning plan | Keys | Docs | Returned | Page total |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| appointments: list, no filter, sort date asc | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| appointments: list, no filter, sort date desc | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| appointments: list, no filter, sort createdAt asc | `createdAt_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| appointments: list, no filter, sort createdAt desc | `createdAt_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| appointments: list, no filter, sort patientName asc | `patientNameLower_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| appointments: list, no filter, sort patientName desc | `patientNameLower_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| appointments: list, no filter, sort doctorName asc | `doctorName_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| appointments: list, no filter, sort doctorName desc | `doctorName_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| appointments: list, no filter, sort status asc | `status_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| appointments: list, no filter, sort status desc | `status_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| appointments: list: status + date range | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 23 | 23 | 20 | COUNT_SCAN |
+| appointments: list: department | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 43 | 43 | 20 | COUNT_SCAN |
+| appointments: list: date range only | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | COUNT_SCAN |
+| appointments: list: single day | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 17 | 17 | 17 | COUNT_SCAN |
+| appointments: list: patient name "asha" | `patientNameLower_1__id_1` | SORT ← FETCH ← IXSCAN | 23 | 22 | 20 | IXSCAN |
+| appointments: list: patient name "rao asha" | `patientNameLower_1__id_1` | SORT ← FETCH ← IXSCAN | 1 | 0 | 0 | IXSCAN |
+| appointments: list: mobile prefix | `patientMobile_1` | SORT ← FETCH ← IXSCAN | 34 | 33 | 20 | IXSCAN |
+| appointments: list: doctorId (also a doctor's own list) | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 43 | 43 | 20 | COUNT_SCAN |
+| appointments: list: doctorName -> doctorId $in | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 43 | 43 | 20 | COUNT_SCAN |
+| appointments: list: department + status + date range | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 46 | 46 | 20 | IXSCAN |
+| appointments: list: status, sorted by patient name | `status_1_date_1` | SORT ← FETCH ← IXSCAN | 24 | 24 | 20 | COUNT_SCAN |
+| appointments: slot grid: a doctor's day | `doctorId_1_date_1` | LIMIT ← FETCH ← IXSCAN | 12 | 12 | 12 | COUNT_SCAN |
+| appointments: schedule guard: appointments still to happen | `date_1_slotStart_1__id_1` | LIMIT ← FETCH ← IXSCAN | 45 | 45 | 20 | IXSCAN |
+| patients: search: patient code | `patientCode_1` | SORT ← FETCH ← IXSCAN | 1 | 1 | 1 | EXPRESS_IXSCAN |
+| patients: search: mobile prefix | `mobile_1` | SORT ← FETCH ← IXSCAN | 4 | 3 | 3 | IXSCAN |
+| patients: search: name "asha" | `nameLower_1__id_1` | LIMIT ← FETCH ← IXSCAN | 2 | 1 | 1 | IXSCAN |
+| patients: search: name "rao" | `nameLower_1__id_1` | LIMIT ← FETCH ← IXSCAN | 1 | 0 | 0 | IXSCAN |
+| patients: search: name "rao asha" | `nameLower_1__id_1` | LIMIT ← FETCH ← IXSCAN | 1 | 0 | 0 | IXSCAN |
+| patients: search: mobile duplicates (exact number) | `mobile_1` | SORT ← FETCH ← IXSCAN | 3 | 2 | 2 | IXSCAN |
+| patients: list: no search term | `nameLower_1__id_1` | LIMIT ← FETCH ← IXSCAN | 20 | 20 | 20 | estimatedDocumentCount (metadata) |
+| doctors: list: no filter, sorted by name | `name_1` | LIMIT ← FETCH ← IXSCAN | 4 | 4 | 4 | estimatedDocumentCount (metadata) |
+| doctors: list: department, sorted by name | `departmentId_1_name_1` | LIMIT ← FETCH ← IXSCAN | 1 | 1 | 1 | COUNT_SCAN |
+| doctors: list: search "iyer" (name or specialization contains) | `name_1` | SUBPLAN ← LIMIT ← FETCH ← IXSCAN | 4 | 4 | 1 | IXSCAN |
+| doctors: doctorName filter lookup | `name_1` | LIMIT ← FETCH ← IXSCAN | 4 | 1 | 1 | IXSCAN |
+| departments: list, sorted by name (not paginated, no count) | `name_1` | LIMIT ← FETCH ← IXSCAN | 5 | 5 | 5 | none |
+| users: login: user by email | `email_1` | EXPRESS_IXSCAN | 1 | 1 | 1 | EXPRESS_IXSCAN |
+| refresh_tokens: refresh: token by hash | `tokenHash_1` | EXPRESS_IXSCAN | 0 | 0 | 0 | EXPRESS_IXSCAN |
 
-Each list also runs `countDocuments` with the same filter, for the page total. Filtered counts read only the index (COUNT_SCAN or IXSCAN, 0 documents examined); the patient-code count examines its one document. The three unfiltered lists count with a COLLSCAN: 43,260, 43,260 and 5,000 documents.
+**No query reads a whole collection.** Each of the 37 shapes uses an index, and so does each page total: the unfiltered lists take theirs from the collection's metadata (`estimatedDocumentCount`), and every filtered total is a COUNT_SCAN or an IXSCAN.
 
-### COLLSCAN flags
+### Every list sort is an index
 
-1. **The default appointment list (no filters) is a COLLSCAN.** This is the most important finding, because it is the default view.
-   - **Cause:** the sort is `{ date, slotStart, _id }`, and the trailing `_id` (a tie-breaker that keeps pages stable) isn't in any index.
-   - **Effect:** `date_1_slotStart_1` can't return rows already in that order. With no filter to narrow things down, MongoDB reads everything and sorts in memory.
-2. **The appointment list sorted by patient name, with no filter,** has the same cause: the sort `{ patientNameLower, _id }` isn't fully covered by `patientNameLower_1`.
-3. **The patient list without a search term** has the same cause again: the sort `{ nameLower, _id }` isn't fully covered by `nameLower_1`.
-4. **Doctor name search scans the doctors collection.** This is expected and harmless: there are only a few dozen doctors, and "contains" matching can't use an index anyway. The appointments query that follows it uses `doctorId_1_date_1`.
+Each sort the list offers ends with `_id`, the tie-breaker that keeps pages stable, and each has an index with exactly those fields: `{ date, slotStart, _id }`, `{ patientNameLower, _id }`, `{ createdAt, _id }`, `{ doctorName, _id }` and `{ status, _id }`. Read forwards or backwards, the index returns rows already in order, so an unfiltered list examines 20 index keys and 20 documents for a page of 20, whatever the size of the collection. The same holds for the patient list (`{ nameLower, _id }`) and the doctor list (`{ name }`).
 
-### Recommended fix (not yet in the code)
+Before this change, measured on the 43,260-appointment dataset:
 
-Make the sort indexes end with `_id`, so the index itself returns rows in the requested order. These were measured on the same dataset:
-
-| Query | Today | With the recommended index |
+| Query | Before | After |
 | --- | --- | --- |
-| Appointment list, default | COLLSCAN, 43,260 docs examined, 160 ms | `{ date: 1, slotStart: 1, _id: 1 }`: IXSCAN, **20** docs, 1 ms |
-| Appointment list, sorted by patient name | COLLSCAN, 43,260 docs, 168 ms | `{ patientNameLower: 1, _id: 1 }`: IXSCAN, **20** docs, 1 ms |
-| Patient list, no search term | COLLSCAN, 5,000 docs, 22 ms | `{ nameLower: 1, _id: 1 }`: IXSCAN, **20** docs, 0 ms |
-| Appointment list, SCHEDULED in one week | IXSCAN + in-memory sort, 1,513 docs | Planner switches to `{ date, slotStart, _id }`: **40** docs |
+| Appointment list, default | SORT ← COLLSCAN, 43,260 docs, 160 ms | IXSCAN on `{ date, slotStart, _id }`, **20** docs, 1 ms |
+| Appointment list, sorted by patient name | SORT ← COLLSCAN, 43,260 docs, 168 ms | IXSCAN on `{ patientNameLower, _id }`, **20** docs, 1 ms |
+| Patient list, no search term | SORT ← COLLSCAN, 5,000 docs, 22 ms | IXSCAN on `{ nameLower, _id }`, **20** docs, 0 ms |
+| Unfiltered page totals | `countDocuments({})`: COLLSCAN of every document | `estimatedDocumentCount()`: collection metadata |
 
-- **Replacing, not adding.** Each recommended index starts with the fields of the index it would replace (`date_1_slotStart_1`, `patientNameLower_1`, `nameLower_1`), so it serves their queries too. The index count wouldn't grow.
-- **Unfiltered counts.** The unfiltered list could also show `estimatedDocumentCount()`, which reads collection metadata instead of counting.
+The longer indexes replace `date_1_slotStart_1`, `patientNameLower_1` and `nameLower_1`, and serve their queries too. Startup creates new indexes but never drops old ones, so an existing database is brought in line once with `npm run indexes:sync`, which runs Mongoose's `syncIndexes` on every model.
 
-### What the measured plans show
+### Where a filtered list still sorts in memory
 
-- **Every filtered query uses an index.** The filters were designed for the indexes:
-  - equality fields first: `doctorId`, `status`, `departmentId`
-  - then the date range
-  - prefix searches as anchored regexes on lowercase copies
-- **The slot grid is the cheapest query.** It examined 11 documents for 11 results, using the double-booking index.
-- **Filtered lists still sort in memory** (the SORT stage) after an index scan. That is fine while one filter matches a few thousand rows. At much larger volumes, compound indexes that end with the sort fields would remove the in-memory sort too.
-- **Every list uses `.lean()`** (plain objects, no Mongoose documents) and `Promise.all` to run the page query and the count together. The appointment list also leaves out `patientNameLower` and `__v` with a projection.
+A filter that a selective index answers (a patient name or mobile prefix, a patient code) picks out a small set, which is then sorted in memory (the SORT rows above). A prefix match is a range on its index, so the same index can't also return the rows in date order. The alternative, walking the date index and filtering as it goes, would read the whole list for a rare name. The planner chooses between the two on every query, and for the date filters, departments and doctors it picks the sort index. The in-memory sort is bounded by what the filter matches; at much larger volumes, the search fields (name words and mobile) are the ones to move to Atlas Search.
+
+- **Equality and date filters** (`status`, `departmentId`, `doctorId`, `dateFrom` and `dateTo`) are answered by the compound indexes that start with them. The planner may also walk the `{ date, slotStart, _id }` index and filter as it goes when that reads less.
+- **The slot grid is the cheapest query:** a doctor's day on `{ doctorId, date }`, 12 keys for 12 appointments.
+- **The schedule-change check** (appointments still to happen, see [Why the schedule is embedded](#why-the-schedule-is-embedded-in-the-doctor)) is one indexed query per change.
+- **Every list uses `.lean()`** and `Promise.all` to run the page query and the count together. The appointment list leaves out `patientNameLower` and `__v` with a projection.
 
 ## 11. Scaling to millions of appointments
 
-**Size today, measured.** On the measured dataset, one appointment averages about **440 bytes** of BSON. Its 8 indexes (`_id` and the 7 listed in [section 5](#5-indexes)) take about **94 bytes per appointment** together, from 10 bytes for `status_1_date_1` to 17 bytes for `uniq_active_doctor_slot` (WiredTiger compresses index keys). That is roughly:
+**Size today, measured.** On the measured dataset, one appointment averages about **440 bytes** of BSON. The 8 indexes it had then (`_id` and 7 more) took about **94 bytes per appointment** together, from 10 bytes for `status_1_date_1` to 17 bytes for `uniq_active_doctor_slot` (WiredTiger compresses index keys). The sort indexes added after manual QA bring the count to 11. An estimate, not a measurement: each new index costs about the same as the existing ones, so about **140 bytes per appointment** in all, roughly half as much again as the figures below:
 
 | Appointments | Documents (before compression) | Indexes |
 | ---: | ---: | ---: |

@@ -100,6 +100,7 @@ Server (run in `server/`):
 - `npm run test:coverage`: the tests plus a coverage report
 - `npm run secrets`: generate missing JWT secrets in `.env` (never printed)
 - `npm run seed`: create the first Super Admin and the departments from env vars
+- `npm run indexes:sync`: make the indexes match the models, dropping replaced ones (once after upgrading; startup only creates)
 
 Client (run in `client/`):
 - Setup: `npm install`. The defaults point at the local API. To change them, copy `.env.example` to `.env.local`.

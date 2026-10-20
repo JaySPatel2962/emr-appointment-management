@@ -68,6 +68,10 @@ const doctorSchema = new Schema(
 
 // Doctor lists filtered by department and sorted by name.
 doctorSchema.index({ departmentId: 1, name: 1 });
+// The doctor list sorted by name, and the doctor search ("contains" on the name or the
+// specialization): a scan of these small indexes instead of the collection.
+doctorSchema.index({ name: 1 });
+doctorSchema.index({ specialization: 1 });
 
 export type Doctor = InferSchemaType<typeof doctorSchema>;
 

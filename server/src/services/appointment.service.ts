@@ -322,21 +322,43 @@ const buildListFilter = async (
       conditions.push({ doctorId: { $in: await findDoctorIdsByName(query.doctorName) } });
     }
   }
-  return { $and: conditions };
+  // No filter at all: an empty query, which the sort indexes answer and the count can estimate.
+  const active = conditions.filter((condition) => Object.keys(condition).length > 0);
+  return active.length === 0 ? {} : { $and: active };
 };
+
+/**
+ * The list's sort: the chosen field, the time within a day when sorting by date, and _id, which
+ * breaks ties so pages never overlap. Each has an index ending with _id, so no sort is done in
+ * memory.
+ */
+export const listSort = (
+  sortBy: AppointmentSortField,
+  sortOrder: 'asc' | 'desc',
+): Record<string, SortOrder> => {
+  const direction: SortOrder = sortOrder === 'asc' ? 1 : -1;
+  return {
+    [SORT_FIELDS[sortBy]]: direction,
+    ...(sortBy === 'date' ? { slotStart: direction } : {}),
+    _id: direction,
+  };
+};
+
+/**
+ * The page total. Without a filter it comes from the collection's metadata, which is instant;
+ * counting would read every appointment. Any filter is counted from its index.
+ */
+const countAppointments = (filter: QueryFilter<Appointment>): Promise<number> =>
+  Object.keys(filter).length === 0
+    ? AppointmentModel.estimatedDocumentCount()
+    : AppointmentModel.countDocuments(filter);
 
 export const listAppointments = async (
   query: ListAppointmentsQuery,
   actor: AuthUser,
 ): Promise<Page<AppointmentDto>> => {
   const filter = await buildListFilter(query, actor);
-  const direction: SortOrder = query.sortOrder === 'asc' ? 1 : -1;
-  // Same-day appointments sort by time, and _id breaks ties so pages never overlap.
-  const sort: Record<string, SortOrder> = {
-    [SORT_FIELDS[query.sortBy]]: direction,
-    ...(query.sortBy === 'date' ? { slotStart: direction } : {}),
-    _id: direction,
-  };
+  const sort = listSort(query.sortBy, query.sortOrder);
   const [appointments, total] = await Promise.all([
     AppointmentModel.find(filter)
       .select('-patientNameLower -__v')
@@ -344,7 +366,7 @@ export const listAppointments = async (
       .skip(pageSkip(query))
       .limit(query.limit)
       .lean(),
-    AppointmentModel.countDocuments(filter),
+    countAppointments(filter),
   ]);
   return toPage(appointments.map(toAppointmentDto), total, query);
 };

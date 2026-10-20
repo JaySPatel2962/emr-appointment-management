@@ -66,11 +66,17 @@ appointmentSchema.index({ doctorId: 1, date: 1 });
 appointmentSchema.index({ status: 1, date: 1 });
 // Department filter with a date range.
 appointmentSchema.index({ departmentId: 1, date: 1 });
-// Lists filtered only by date range, sorted by date and time (the default list view).
-appointmentSchema.index({ date: 1, slotStart: 1 });
-// Patient search on the copied fields: anchored prefix matches use these indexes.
+// The list's sorts. Each ends with _id, the tie-breaker that keeps pages stable, so the index
+// returns rows already in order: no list reads the whole collection or sorts it in memory.
+// Read backwards, each also serves the descending sort.
+// The default list, by date and time, and lists filtered only by a date range.
+appointmentSchema.index({ date: 1, slotStart: 1, _id: 1 });
+appointmentSchema.index({ patientNameLower: 1, _id: 1 });
+appointmentSchema.index({ createdAt: 1, _id: 1 });
+appointmentSchema.index({ doctorName: 1, _id: 1 });
+appointmentSchema.index({ status: 1, _id: 1 });
+// Mobile search on the copied field: an anchored prefix match uses this index.
 appointmentSchema.index({ patientMobile: 1 });
-appointmentSchema.index({ patientNameLower: 1 });
 
 export type Appointment = InferSchemaType<typeof appointmentSchema>;
 

@@ -88,13 +88,16 @@ Running notes, phase by phase, for writing `ENGINEERING_DECISIONS.md`. Each entr
 | appointments | `{ doctorId, date }` | A doctor's appointments for a day or range: the doctor's own list and slot availability. The unique index can't serve these queries because it is partial. |
 | appointments | `{ status, date }` | Status filter with a date range |
 | appointments | `{ departmentId, date }` | Department filter with a date range |
-| appointments | `{ date, slotStart }` | Lists filtered only by date range, sorted by date and time |
-| appointments | `{ patientMobile }`, `{ patientNameLower }` | Patient search on the copied fields, as anchored prefix matches |
+| appointments | `{ date, slotStart, _id }` | The default list, sorted by date and time, and lists filtered by date range |
+| appointments | `{ createdAt, _id }`, `{ doctorName, _id }`, `{ status, _id }`, `{ patientNameLower, _id }` | The list's other sorts, each straight from an index (added after manual QA) |
+| appointments | `{ patientMobile }` | Mobile search on the copied field, as an anchored prefix match |
 | patients | `{ patientCode }`, unique | Lookup by patient ID |
-| patients | `{ mobile }`, `{ nameLower }` | Patient search by mobile number or name prefix |
+| patients | `{ mobile }` | Patient search by the start of a mobile number |
+| patients | `{ nameLower, _id }` | The patient list, sorted by name |
 | users | `{ email }`, unique | Login lookup, and one account per email |
 | doctors | `{ userId }`, unique | One profile per user; finds the doctor at login |
 | doctors | `{ departmentId, name }` | Doctor lists by department, sorted by name |
+| doctors | `{ name }`, `{ specialization }` | The doctor list sorted by name, and doctor search, without reading the collection |
 | departments | `{ name }`, unique, case-insensitive | No duplicate departments |
 | refresh_tokens | `{ tokenHash }`, unique | Lookup on refresh |
 | refresh_tokens | `{ userId }` | Revoking all of a user's tokens |
@@ -102,7 +105,9 @@ Running notes, phase by phase, for writing `ENGINEERING_DECISIONS.md`. Each entr
 | audit_logs | `{ createdAt: -1 }` | Most recent activity first |
 | audit_logs | `{ entity, entityId, createdAt: -1 }` | The history of one record, newest first |
 
-Every index exists because a query needs it, since each extra index slows writes slightly. Appointments carry seven, which is acceptable because they are read (lists, slot grids, searches) far more often than they are written.
+Every index exists because a query needs it, since each extra index slows writes slightly. Appointments carry ten besides `_id`, which is acceptable because they are read (lists, slot grids, searches) far more often than they are written.
+
+**Sort indexes (added after manual QA).** Each list sort ends with `_id`, the tie-breaker that keeps pages stable. An index on the sort field alone couldn't return rows in that order, so an unfiltered list read the whole collection and sorted it in memory: 43,260 documents for a page of 20 at that size. Each sort now has an index with exactly its fields, and an unfiltered total comes from `estimatedDocumentCount()`, the collection's metadata, instead of a count. A filtered list may still sort its matches in memory: a prefix range can't also give the sort order, and reading the whole list in order to find a rare name would cost more. `npm run indexes:sync` drops the replaced indexes on an existing database, since startup only creates.
 
 ## Phase 3: Authentication
 

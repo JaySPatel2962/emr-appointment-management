@@ -66,7 +66,10 @@ export const searchPatients = async (query: SearchPatientsQuery): Promise<Page<P
       .skip(pageSkip(query))
       .limit(query.limit)
       .lean(),
-    PatientModel.countDocuments(filter),
+    // Without a search term, the total comes from the collection's metadata instead of a count.
+    query.search === undefined
+      ? PatientModel.estimatedDocumentCount()
+      : PatientModel.countDocuments(filter),
   ]);
   return toPage(patients.map(toPatientDto), total, query);
 };

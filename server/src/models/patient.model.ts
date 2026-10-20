@@ -23,9 +23,8 @@ patientSchema.plugin(lowercaseCopy('name', 'nameLower'));
 
 // Search by mobile number, exact or as a prefix while typing.
 patientSchema.index({ mobile: 1 });
-// Search by name: an anchored prefix such as /^asha/ on the lowercase copy uses this index.
-// A text index wouldn't do: it matches whole words only, never prefixes.
-patientSchema.index({ nameLower: 1 });
+// The patient list, sorted by name with _id as the tie-breaker, read straight from the index.
+patientSchema.index({ nameLower: 1, _id: 1 });
 
 export type Patient = InferSchemaType<typeof patientSchema>;
 

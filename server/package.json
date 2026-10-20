@@ -19,6 +19,7 @@
     "build": "npm run clean && tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "seed": "tsx --conditions=development src/scripts/seed.ts",
+    "indexes:sync": "tsx --conditions=development src/scripts/sync-indexes.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

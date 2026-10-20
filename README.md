@@ -36,6 +36,7 @@ npm run dev
 | `npm run build` | Compiles TypeScript to `dist/` (tsc) |
 | `npm start` | Runs the compiled build |
 | `npm run seed` | Creates the first Super Admin and the departments from env vars |
+| `npm run indexes:sync` | Makes the database's indexes match the models, dropping replaced ones. Run once after upgrading. |
 | `npm run secrets` | Generates any missing JWT secret in `.env`, without printing it |
 | `npm run lint` | ESLint (type-aware) |
 | `npm run format` | Prettier |

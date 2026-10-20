@@ -101,7 +101,10 @@ export const listDoctors = async (
   };
   const [doctors, total] = await Promise.all([
     DoctorModel.find(filter).sort({ name: 1 }).skip(pageSkip(query)).limit(query.limit).lean(),
-    DoctorModel.countDocuments(filter),
+    // Without a filter (no department, no search, not a doctor), the total comes from metadata.
+    Object.keys(filter).length === 0
+      ? DoctorModel.estimatedDocumentCount()
+      : DoctorModel.countDocuments(filter),
   ]);
   return toPage(await toDoctorDtos(doctors), total, query);
 };
