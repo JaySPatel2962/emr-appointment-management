@@ -126,7 +126,7 @@ Every response is `{ success, message, data, meta }`. Errors have `data: null` a
 - `Session`: `{ accessToken, tokenType: 'Bearer', expiresIn: 900, user: User }`
 - `Department`: `{ id, name }`
 - `DaySchedule`: `{ dayOfWeek: 0-6 (0 = Sunday), sessions: [{ start, end }], breaks: [{ start, end }] }`, times as `"HH:mm"`
-- `Doctor`: `{ id, userId, name, specialization, department: Department, slotDurationMinutes, schedule: DaySchedule[] }`
+- `Doctor`: `{ id, userId, name, specialization, department: Department, slotDurationMinutes, schedule: DaySchedule[], scheduleVersion }`. `scheduleVersion` goes up with every saved schedule change.
 - `DaySlots`: `{ doctorId, date, timezone, slotDurationMinutes, slots: [{ start, end, status: AVAILABLE | BOOKED | PAST, appointmentId? }] }`
 - `Patient`: `{ id, patientCode, name, mobile, gender: MALE | FEMALE | OTHER, dateOfBirth: string | null }`
 - `Appointment`: `{ id, patient: { id, patientCode, name, mobile }, doctor: { id, name }, departmentId, date, slotStart, slotEnd, purpose, notes, status, createdBy, arrivedAt, completedAt, cancelledAt, createdAt, updatedAt }`. The three status timestamps are `null` until set.
@@ -145,7 +145,7 @@ SA = Super Admin, R = Receptionist, D = Doctor.
 | `POST /doctors` | SA | `{ name, email, password, departmentId, specialization, slotDurationMinutes, schedule? }` | `Doctor` (201) |
 | `GET /doctors` | all; D sees only self | `?departmentId&search&page&limit` | `Doctor[]` |
 | `GET /doctors/:id` | all; D only self | | `Doctor` |
-| `PUT /doctors/:id/schedule` | SA | `{ schedule, slotDurationMinutes? }` | `Doctor` |
+| `PUT /doctors/:id/schedule` | SA | `{ schedule, slotDurationMinutes?, scheduleVersion }`: the version the change is based on | `Doctor` |
 | `GET /slots` | all; D only own | `?doctorId&date&departmentId?` | `DaySlots` |
 | `GET /patients` | SA, R | `?search&page&limit`: a patient code, the start of a mobile number, or words that each start a word of the name | `Patient[]` |
 | `POST /appointments` | SA, R | `{ doctorId, date, slotStart, purpose, notes?, departmentId?, patientId }`, or `newPatient: { name, mobile, gender, dateOfBirth? }` instead of `patientId` | `Appointment` (201) |
@@ -163,7 +163,7 @@ Status codes:
 - 401: missing, invalid or expired token
 - 403: the role is not allowed
 - 404: not found, including another doctor's records
-- 409: the slot is taken, the status change isn't allowed, or the email is already used
+- 409: the slot is taken, the status change isn't allowed, the email is already used, a schedule change would strand bookings, or the schedule was saved by someone else since it was read (`meta.code` names the schedule conflicts)
 - 422: the slot isn't offered or has started, the date is past, or the department is unknown
 - 429: rate limit
 
@@ -216,7 +216,7 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
     - component tests for the login form, ProtectedRoute and RoleRoute, the slot grid and the table
     - axe-core on 23 screen states, with no violations
     - scripted keyboard and focus checks
-  - 5 end-to-end tests: 91 Playwright tests in `client/e2e/` covering auth, RBAC, the scheduler, booking, double booking, live updates, the list, row actions, admin, the dashboard, three screen widths, accessibility and render counts. Fixes they led to:
+  - 5 end-to-end tests: 92 Playwright tests in `client/e2e/` covering auth, RBAC, the scheduler, booking, double booking, live updates, the list, row actions, admin, the dashboard, three screen widths, accessibility and render counts. Fixes they led to:
     - the list's text filters: two boxes edited in one pause both apply, "Clear filters" can't be undone by a search still waiting, and the boxes follow the URL when it changes elsewhere (`useTextFilters`)
     - a row action re-rendered every row's buttons; now only its own (`useIsActionPending`)
     - the date picker named a past day "no sessions"; it now says "unavailable", and its button is named by its label and date
@@ -234,7 +234,7 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
   - clipped times in the schedule editor on phones (R2)
   - no sort control at 768 px (R2)
 
-  Of its open questions, Q-02, Q-03, Q-06 and Q-07 were resolved by changes; Q-01, Q-04 and Q-05 are kept and listed in the README's Assumptions and Known limitations; Q-08 and Q-09, from the retest, are product decisions still to take. The throwaway scripts in `qa/` and `qa-credentials.local.md` are gitignored.
+  Of its open questions, Q-02, Q-03, Q-06 and Q-07 were resolved by changes; Q-01, Q-04 and Q-05 are kept and listed in the README's Assumptions and Known limitations; Q-08, from the retest, was resolved by a version check on schedule saves; Q-09 is a product decision still to take. The throwaway scripts in `qa/` and `qa-credentials.local.md` are gitignored.
 - Design decisions: the Frontend sections of `docs/decisions-notes.md`
 
 ### End-to-end tests (`client/e2e/`)

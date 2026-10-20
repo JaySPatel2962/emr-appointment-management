@@ -69,6 +69,11 @@
       "type": "string"
     },
     {
+      "key": "scheduleVersion",
+      "value": "0",
+      "type": "string"
+    },
+    {
       "key": "patientId",
       "value": "",
       "type": "string"
@@ -582,6 +587,7 @@
                   "const body = pm.response.json();",
                   "if (pm.response.code < 300 && body.data) {",
                   "  pm.collectionVariables.set('doctorId', body.data.id);",
+                  "  pm.collectionVariables.set('scheduleVersion', body.data.scheduleVersion);",
                   "}"
                 ]
               }
@@ -656,7 +662,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"success\": true,\n  \"message\": \"Doctor created\",\n  \"data\": {\n    \"id\": \"6ad4b1a4c42b65083c36c4e6\",\n    \"userId\": \"6ad4b1a4c42b65083c36c4e5\",\n    \"name\": \"Dr. Kavya Mehta\",\n    \"specialization\": \"Interventional Cardiology\",\n    \"department\": {\n      \"id\": \"6ad4b1a2c42b65083c36c4d8\",\n      \"name\": \"Cardiology\"\n    },\n    \"slotDurationMinutes\": 15,\n    \"schedule\": [\n      {\n        \"dayOfWeek\": 1,\n        \"sessions\": [\n          {\n            \"start\": \"09:00\",\n            \"end\": \"12:00\"\n          },\n          {\n            \"start\": \"13:00\",\n            \"end\": \"17:00\"\n          }\n        ],\n        \"breaks\": [\n          {\n            \"start\": \"12:00\",\n            \"end\": \"13:00\"\n          }\n        ]\n      },\n      {\n        \"dayOfWeek\": 3,\n        \"sessions\": [\n          {\n            \"start\": \"10:00\",\n            \"end\": \"14:00\"\n          }\n        ],\n        \"breaks\": []\n      }\n    ]\n  },\n  \"meta\": {}\n}"
+              "body": "{\n  \"success\": true,\n  \"message\": \"Doctor created\",\n  \"data\": {\n    \"id\": \"6ad4b1a4c42b65083c36c4e6\",\n    \"userId\": \"6ad4b1a4c42b65083c36c4e5\",\n    \"name\": \"Dr. Kavya Mehta\",\n    \"specialization\": \"Interventional Cardiology\",\n    \"department\": {\n      \"id\": \"6ad4b1a2c42b65083c36c4d8\",\n      \"name\": \"Cardiology\"\n    },\n    \"slotDurationMinutes\": 15,\n    \"schedule\": [\n      {\n        \"dayOfWeek\": 1,\n        \"sessions\": [\n          {\n            \"start\": \"09:00\",\n            \"end\": \"12:00\"\n          },\n          {\n            \"start\": \"13:00\",\n            \"end\": \"17:00\"\n          }\n        ],\n        \"breaks\": [\n          {\n            \"start\": \"12:00\",\n            \"end\": \"13:00\"\n          }\n        ]\n      },\n      {\n        \"dayOfWeek\": 3,\n        \"sessions\": [\n          {\n            \"start\": \"10:00\",\n            \"end\": \"14:00\"\n          }\n        ],\n        \"breaks\": []\n      }\n    ],\n    \"scheduleVersion\": 0\n  },\n  \"meta\": {}\n}"
             }
           ]
         },
@@ -762,7 +768,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"success\": true,\n  \"message\": \"Doctors retrieved\",\n  \"data\": [\n    {\n      \"id\": \"6ad4b1a4c42b65083c36c4e6\",\n      \"userId\": \"6ad4b1a4c42b65083c36c4e5\",\n      \"name\": \"Dr. Kavya Mehta\",\n      \"specialization\": \"Interventional Cardiology\",\n      \"department\": {\n        \"id\": \"6ad4b1a2c42b65083c36c4d8\",\n        \"name\": \"Cardiology\"\n      },\n      \"slotDurationMinutes\": 15,\n      \"schedule\": [\n        {\n          \"dayOfWeek\": 1,\n          \"sessions\": [\n            {\n              \"start\": \"09:00\",\n              \"end\": \"12:00\"\n            },\n            {\n              \"start\": \"13:00\",\n              \"end\": \"17:00\"\n            }\n          ],\n          \"breaks\": [\n            {\n              \"start\": \"12:00\",\n              \"end\": \"13:00\"\n            }\n          ]\n        },\n        {\n          \"dayOfWeek\": 3,\n          \"sessions\": [\n            {\n              \"start\": \"10:00\",\n              \"end\": \"14:00\"\n            }\n          ],\n          \"breaks\": []\n        }\n      ]\n    }\n  ],\n  \"meta\": {\n    \"page\": 1,\n    \"limit\": 10,\n    \"total\": 1,\n    \"totalPages\": 1\n  }\n}"
+              "body": "{\n  \"success\": true,\n  \"message\": \"Doctors retrieved\",\n  \"data\": [\n    {\n      \"id\": \"6ad4b1a4c42b65083c36c4e6\",\n      \"userId\": \"6ad4b1a4c42b65083c36c4e5\",\n      \"name\": \"Dr. Kavya Mehta\",\n      \"specialization\": \"Interventional Cardiology\",\n      \"department\": {\n        \"id\": \"6ad4b1a2c42b65083c36c4d8\",\n        \"name\": \"Cardiology\"\n      },\n      \"slotDurationMinutes\": 15,\n      \"schedule\": [\n        {\n          \"dayOfWeek\": 1,\n          \"sessions\": [\n            {\n              \"start\": \"09:00\",\n              \"end\": \"12:00\"\n            },\n            {\n              \"start\": \"13:00\",\n              \"end\": \"17:00\"\n            }\n          ],\n          \"breaks\": [\n            {\n              \"start\": \"12:00\",\n              \"end\": \"13:00\"\n            }\n          ]\n        },\n        {\n          \"dayOfWeek\": 3,\n          \"sessions\": [\n            {\n              \"start\": \"10:00\",\n              \"end\": \"14:00\"\n            }\n          ],\n          \"breaks\": []\n        }\n      ],\n      \"scheduleVersion\": 0\n    }\n  ],\n  \"meta\": {\n    \"page\": 1,\n    \"limit\": 10,\n    \"total\": 1,\n    \"totalPages\": 1\n  }\n}"
             }
           ]
         },
@@ -776,7 +782,12 @@
                 "exec": [
                   "pm.test('Status is 200', function () {",
                   "  pm.response.to.have.status(200);",
-                  "});"
+                  "});",
+                  "// The version a schedule change must send back.",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code < 300 && body.data) {",
+                  "  pm.collectionVariables.set('scheduleVersion', body.data.scheduleVersion);",
+                  "}"
                 ]
               }
             }
@@ -824,7 +835,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"success\": true,\n  \"message\": \"Doctor retrieved\",\n  \"data\": {\n    \"id\": \"6ad4b1a4c42b65083c36c4e6\",\n    \"userId\": \"6ad4b1a4c42b65083c36c4e5\",\n    \"name\": \"Dr. Kavya Mehta\",\n    \"specialization\": \"Interventional Cardiology\",\n    \"department\": {\n      \"id\": \"6ad4b1a2c42b65083c36c4d8\",\n      \"name\": \"Cardiology\"\n    },\n    \"slotDurationMinutes\": 15,\n    \"schedule\": [\n      {\n        \"dayOfWeek\": 1,\n        \"sessions\": [\n          {\n            \"start\": \"09:00\",\n            \"end\": \"12:00\"\n          },\n          {\n            \"start\": \"13:00\",\n            \"end\": \"17:00\"\n          }\n        ],\n        \"breaks\": [\n          {\n            \"start\": \"12:00\",\n            \"end\": \"13:00\"\n          }\n        ]\n      },\n      {\n        \"dayOfWeek\": 3,\n        \"sessions\": [\n          {\n            \"start\": \"10:00\",\n            \"end\": \"14:00\"\n          }\n        ],\n        \"breaks\": []\n      }\n    ]\n  },\n  \"meta\": {}\n}"
+              "body": "{\n  \"success\": true,\n  \"message\": \"Doctor retrieved\",\n  \"data\": {\n    \"id\": \"6ad4b1a4c42b65083c36c4e6\",\n    \"userId\": \"6ad4b1a4c42b65083c36c4e5\",\n    \"name\": \"Dr. Kavya Mehta\",\n    \"specialization\": \"Interventional Cardiology\",\n    \"department\": {\n      \"id\": \"6ad4b1a2c42b65083c36c4d8\",\n      \"name\": \"Cardiology\"\n    },\n    \"slotDurationMinutes\": 15,\n    \"schedule\": [\n      {\n        \"dayOfWeek\": 1,\n        \"sessions\": [\n          {\n            \"start\": \"09:00\",\n            \"end\": \"12:00\"\n          },\n          {\n            \"start\": \"13:00\",\n            \"end\": \"17:00\"\n          }\n        ],\n        \"breaks\": [\n          {\n            \"start\": \"12:00\",\n            \"end\": \"13:00\"\n          }\n        ]\n      },\n      {\n        \"dayOfWeek\": 3,\n        \"sessions\": [\n          {\n            \"start\": \"10:00\",\n            \"end\": \"14:00\"\n          }\n        ],\n        \"breaks\": []\n      }\n    ],\n    \"scheduleVersion\": 0\n  },\n  \"meta\": {}\n}"
             }
           ]
         },
@@ -838,7 +849,12 @@
                 "exec": [
                   "pm.test('Status is 200', function () {",
                   "  pm.response.to.have.status(200);",
-                  "});"
+                  "});",
+                  "// The version a schedule change must send back.",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code < 300 && body.data) {",
+                  "  pm.collectionVariables.set('scheduleVersion', body.data.scheduleVersion);",
+                  "}"
                 ]
               }
             }
@@ -853,7 +869,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"schedule\": [\n    {\n      \"dayOfWeek\": 1,\n      \"sessions\": [\n        {\n          \"start\": \"09:00\",\n          \"end\": \"12:00\"\n        },\n        {\n          \"start\": \"13:00\",\n          \"end\": \"17:00\"\n        }\n      ],\n      \"breaks\": [\n        {\n          \"start\": \"12:00\",\n          \"end\": \"13:00\"\n        }\n      ]\n    },\n    {\n      \"dayOfWeek\": 3,\n      \"sessions\": [\n        {\n          \"start\": \"10:00\",\n          \"end\": \"14:00\"\n        }\n      ],\n      \"breaks\": []\n    },\n    {\n      \"dayOfWeek\": 5,\n      \"sessions\": [\n        {\n          \"start\": \"09:00\",\n          \"end\": \"13:00\"\n        }\n      ],\n      \"breaks\": []\n    }\n  ],\n  \"slotDurationMinutes\": 15\n}",
+              "raw": "{\n  \"schedule\": [\n    {\n      \"dayOfWeek\": 1,\n      \"sessions\": [\n        {\n          \"start\": \"09:00\",\n          \"end\": \"12:00\"\n        },\n        {\n          \"start\": \"13:00\",\n          \"end\": \"17:00\"\n        }\n      ],\n      \"breaks\": [\n        {\n          \"start\": \"12:00\",\n          \"end\": \"13:00\"\n        }\n      ]\n    },\n    {\n      \"dayOfWeek\": 3,\n      \"sessions\": [\n        {\n          \"start\": \"10:00\",\n          \"end\": \"14:00\"\n        }\n      ],\n      \"breaks\": []\n    },\n    {\n      \"dayOfWeek\": 5,\n      \"sessions\": [\n        {\n          \"start\": \"09:00\",\n          \"end\": \"13:00\"\n        }\n      ],\n      \"breaks\": []\n    }\n  ],\n  \"slotDurationMinutes\": 15,\n  \"scheduleVersion\": {{scheduleVersion}}\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -871,7 +887,7 @@
                 "schedule"
               ]
             },
-            "description": "SUPER_ADMIN only. Replaces the whole weekly schedule; slotDurationMinutes is optional. Existing appointments are kept."
+            "description": "SUPER_ADMIN only. Replaces the whole weekly schedule; slotDurationMinutes is optional. Existing appointments are kept.\n\nSend the `scheduleVersion` of the schedule being changed (kept from Create doctor, Get doctor or the last Update schedule). A save based on an older version gets 409 \"The schedule changed since you opened it. Reload to see the latest.\", with the current version in `meta.scheduleVersion`."
           },
           "response": [
             {
@@ -886,7 +902,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"schedule\": [\n    {\n      \"dayOfWeek\": 1,\n      \"sessions\": [\n        {\n          \"start\": \"09:00\",\n          \"end\": \"12:00\"\n        },\n        {\n          \"start\": \"13:00\",\n          \"end\": \"17:00\"\n        }\n      ],\n      \"breaks\": [\n        {\n          \"start\": \"12:00\",\n          \"end\": \"13:00\"\n        }\n      ]\n    },\n    {\n      \"dayOfWeek\": 3,\n      \"sessions\": [\n        {\n          \"start\": \"10:00\",\n          \"end\": \"14:00\"\n        }\n      ],\n      \"breaks\": []\n    },\n    {\n      \"dayOfWeek\": 5,\n      \"sessions\": [\n        {\n          \"start\": \"09:00\",\n          \"end\": \"13:00\"\n        }\n      ],\n      \"breaks\": []\n    }\n  ],\n  \"slotDurationMinutes\": 15\n}",
+                  "raw": "{\n  \"schedule\": [\n    {\n      \"dayOfWeek\": 1,\n      \"sessions\": [\n        {\n          \"start\": \"09:00\",\n          \"end\": \"12:00\"\n        },\n        {\n          \"start\": \"13:00\",\n          \"end\": \"17:00\"\n        }\n      ],\n      \"breaks\": [\n        {\n          \"start\": \"12:00\",\n          \"end\": \"13:00\"\n        }\n      ]\n    },\n    {\n      \"dayOfWeek\": 3,\n      \"sessions\": [\n        {\n          \"start\": \"10:00\",\n          \"end\": \"14:00\"\n        }\n      ],\n      \"breaks\": []\n    },\n    {\n      \"dayOfWeek\": 5,\n      \"sessions\": [\n        {\n          \"start\": \"09:00\",\n          \"end\": \"13:00\"\n        }\n      ],\n      \"breaks\": []\n    }\n  ],\n  \"slotDurationMinutes\": 15,\n  \"scheduleVersion\": 0\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -916,7 +932,51 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"success\": true,\n  \"message\": \"Schedule updated\",\n  \"data\": {\n    \"id\": \"6ad4b1a4c42b65083c36c4e6\",\n    \"userId\": \"6ad4b1a4c42b65083c36c4e5\",\n    \"name\": \"Dr. Kavya Mehta\",\n    \"specialization\": \"Interventional Cardiology\",\n    \"department\": {\n      \"id\": \"6ad4b1a2c42b65083c36c4d8\",\n      \"name\": \"Cardiology\"\n    },\n    \"slotDurationMinutes\": 15,\n    \"schedule\": [\n      {\n        \"dayOfWeek\": 1,\n        \"sessions\": [\n          {\n            \"start\": \"09:00\",\n            \"end\": \"12:00\"\n          },\n          {\n            \"start\": \"13:00\",\n            \"end\": \"17:00\"\n          }\n        ],\n        \"breaks\": [\n          {\n            \"start\": \"12:00\",\n            \"end\": \"13:00\"\n          }\n        ]\n      },\n      {\n        \"dayOfWeek\": 3,\n        \"sessions\": [\n          {\n            \"start\": \"10:00\",\n            \"end\": \"14:00\"\n          }\n        ],\n        \"breaks\": []\n      },\n      {\n        \"dayOfWeek\": 5,\n        \"sessions\": [\n          {\n            \"start\": \"09:00\",\n            \"end\": \"13:00\"\n          }\n        ],\n        \"breaks\": []\n      }\n    ]\n  },\n  \"meta\": {}\n}"
+              "body": "{\n  \"success\": true,\n  \"message\": \"Schedule updated\",\n  \"data\": {\n    \"id\": \"6ad4b1a4c42b65083c36c4e6\",\n    \"userId\": \"6ad4b1a4c42b65083c36c4e5\",\n    \"name\": \"Dr. Kavya Mehta\",\n    \"specialization\": \"Interventional Cardiology\",\n    \"department\": {\n      \"id\": \"6ad4b1a2c42b65083c36c4d8\",\n      \"name\": \"Cardiology\"\n    },\n    \"slotDurationMinutes\": 15,\n    \"schedule\": [\n      {\n        \"dayOfWeek\": 1,\n        \"sessions\": [\n          {\n            \"start\": \"09:00\",\n            \"end\": \"12:00\"\n          },\n          {\n            \"start\": \"13:00\",\n            \"end\": \"17:00\"\n          }\n        ],\n        \"breaks\": [\n          {\n            \"start\": \"12:00\",\n            \"end\": \"13:00\"\n          }\n        ]\n      },\n      {\n        \"dayOfWeek\": 3,\n        \"sessions\": [\n          {\n            \"start\": \"10:00\",\n            \"end\": \"14:00\"\n          }\n        ],\n        \"breaks\": []\n      },\n      {\n        \"dayOfWeek\": 5,\n        \"sessions\": [\n          {\n            \"start\": \"09:00\",\n            \"end\": \"13:00\"\n          }\n        ],\n        \"breaks\": []\n      }\n    ],\n    \"scheduleVersion\": 1\n  },\n  \"meta\": {}\n}"
+            },
+            {
+              "name": "409 Conflict: saved by someone else since",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"schedule\": [\n    {\n      \"dayOfWeek\": 1,\n      \"sessions\": [\n        {\n          \"start\": \"09:00\",\n          \"end\": \"12:00\"\n        },\n        {\n          \"start\": \"13:00\",\n          \"end\": \"17:00\"\n        }\n      ],\n      \"breaks\": [\n        {\n          \"start\": \"12:00\",\n          \"end\": \"13:00\"\n        }\n      ]\n    },\n    {\n      \"dayOfWeek\": 3,\n      \"sessions\": [\n        {\n          \"start\": \"10:00\",\n          \"end\": \"14:00\"\n        }\n      ],\n      \"breaks\": []\n    },\n    {\n      \"dayOfWeek\": 5,\n      \"sessions\": [\n        {\n          \"start\": \"09:00\",\n          \"end\": \"13:00\"\n        }\n      ],\n      \"breaks\": []\n    }\n  ],\n  \"slotDurationMinutes\": 15,\n  \"scheduleVersion\": 0\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/doctors/{{doctorId}}/schedule",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "doctors",
+                    "{{doctorId}}",
+                    "schedule"
+                  ]
+                },
+                "description": "SUPER_ADMIN only. Replaces the whole weekly schedule; slotDurationMinutes is optional. Existing appointments are kept."
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": false,\n  \"message\": \"The schedule changed since you opened it. Reload to see the latest.\",\n  \"data\": null,\n  \"meta\": {\n    \"requestId\": \"c1f0e7d2-58a4-4c6b-9a2e-7d3b1e9f0a44\",\n    \"code\": \"SCHEDULE_STALE\",\n    \"scheduleVersion\": 2\n  }\n}"
             }
           ]
         }

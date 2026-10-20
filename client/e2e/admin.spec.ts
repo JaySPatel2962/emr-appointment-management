@@ -263,6 +263,75 @@ test.describe('Editing a schedule', () => {
         .slotDurationMinutes,
     ).toBe(20);
   });
+
+  // Found in the manual retest (R2-01l, Q-08): two admins changed the same week, and the later
+  // save silently undid the earlier one.
+  test("refuses a save made over someone else's, and reloads only when asked", async ({
+    page,
+    guard,
+    openWindow,
+  }) => {
+    const { departments } = seedInfo();
+    const admin = await apiAs(ADMIN);
+    const created = await admin.post<{ id: string }>('/doctors', {
+      name: 'Dr. Meher Kapoor',
+      email: `meher.kapoor.${Date.now()}@clinic.example`,
+      password: PASSWORD,
+      departmentId: departments.Orthopedics,
+      specialization: 'Hand surgery',
+      slotDurationMinutes: 30,
+      schedule: [1, 2, 3, 4, 5].map((dayOfWeek) => ({
+        dayOfWeek,
+        sessions: [{ start: '09:00', end: '13:00' }],
+        breaks: [],
+      })),
+    });
+    const path = `/admin?tab=schedules&doctor=${created.id}`;
+    const heading = "Dr. Meher Kapoor's schedule";
+    const second = await openWindow(ADMIN);
+    await openAs(page, ADMIN, path);
+    await second.goto(path);
+    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+    await expect(second.getByRole('heading', { name: heading })).toBeVisible();
+
+    // The first admin saves a shorter slot.
+    await page.getByLabel('Slot length').selectOption('20');
+    await page.getByRole('button', { name: 'Save schedule' }).click();
+    await expect(toast(page, 'Schedule saved for Dr. Meher Kapoor')).toBeVisible();
+
+    // The second, still looking at the week as it was, ends Monday earlier.
+    guard.expectResponse(409, /\/schedule$/);
+    await second.getByLabel('Monday session 1 ends').fill('12:00');
+    await second.getByRole('button', { name: 'Save schedule' }).click();
+    const refusal = second.getByRole('alert').filter({
+      hasText: 'The schedule changed since you opened it. Reload to see the latest.',
+    });
+    await expect(refusal).toBeInViewport({ ratio: 1 });
+    // Nothing of the first save was lost, and nothing was replaced on the second screen yet.
+    const saved = await admin.get<{ slotDurationMinutes: number; scheduleVersion: number }>(
+      `/doctors/${created.id}`,
+    );
+    expect(saved).toMatchObject({ slotDurationMinutes: 20, scheduleVersion: 1 });
+    await expect(second.getByLabel('Monday session 1 ends')).toHaveValue('12:00');
+
+    await refusal.getByRole('button', { name: 'Reload schedule' }).click();
+    await expect(second.getByLabel('Slot length')).toHaveValue('20');
+    await expect(second.getByLabel('Slot length')).toBeFocused();
+    await expect(second.getByLabel('Monday session 1 ends')).toHaveValue('13:00');
+    await expect(refusal).toBeHidden();
+
+    await second.getByLabel('Monday session 1 ends').fill('12:00');
+    await second.getByRole('button', { name: 'Save schedule' }).click();
+    await expect(toast(second, 'Schedule saved for Dr. Meher Kapoor')).toBeVisible();
+    const both = await admin.get<{
+      slotDurationMinutes: number;
+      scheduleVersion: number;
+      schedule: { dayOfWeek: number; sessions: { end: string }[] }[];
+    }>(`/doctors/${created.id}`);
+    expect(both.slotDurationMinutes).toBe(20);
+    expect(both.scheduleVersion).toBe(2);
+    expect(both.schedule.find((day) => day.dayOfWeek === 1)?.sessions[0]?.end).toBe('12:00');
+  });
 });
 
 test('the admin page opens on the tab and doctor its address names', async ({ page }) => {

@@ -20,6 +20,8 @@ export interface CreateDoctorBody {
 export interface UpdateScheduleBody {
   schedule: DaySchedule[];
   slotDurationMinutes?: number;
+  /** The version the change is based on; an outdated one is refused with 409. */
+  scheduleVersion: number;
 }
 
 /** Doctors sorted by name, up to 100: every doctor of a clinic fits in one page. A doctor sees only themselves. */

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import type { QueryFilter, Types } from 'mongoose';
 
 import { AUDIT_ACTIONS, AUDIT_ENTITIES } from '#app/constants/audit.js';
+import { CONFLICT_CODES } from '#app/constants/conflicts.js';
 import { ROLES } from '#app/constants/roles.js';
 import { DepartmentModel } from '#app/models/department.model.js';
 import { DoctorModel } from '#app/models/doctor.model.js';
@@ -36,6 +37,8 @@ export interface DoctorDto {
   department: DepartmentDto;
   slotDurationMinutes: number;
   schedule: DaySchedule[];
+  /** Goes up with every saved schedule change; send it back when changing the schedule. */
+  scheduleVersion: number;
 }
 
 interface DoctorRecord {
@@ -46,9 +49,25 @@ interface DoctorRecord {
   specialization: string;
   slotDurationMinutes: number;
   schedule: readonly DaySchedule[];
+  scheduleVersion?: number;
 }
 
 const DOCTOR_NOT_FOUND = 'Doctor not found';
+export const SCHEDULE_STALE = 'The schedule changed since you opened it. Reload to see the latest.';
+
+// Doctors saved before schedule versions existed have no scheduleVersion: they are at version 0.
+const versionOf = (doctor: { scheduleVersion?: number | undefined }): number =>
+  doctor.scheduleVersion ?? 0;
+
+const atVersion = (version: number): QueryFilter<Doctor> =>
+  version === 0 ? { scheduleVersion: { $in: [0, null] } } : { scheduleVersion: version };
+
+/** The 409 for a save based on an older version, with the version to reload. */
+const staleScheduleError = (currentVersion: number): AppError =>
+  AppError.conflict(SCHEDULE_STALE, {
+    code: CONFLICT_CODES.SCHEDULE_STALE,
+    scheduleVersion: currentVersion,
+  });
 
 const toPlainSchedule = (schedule: readonly DaySchedule[]): DaySchedule[] =>
   schedule.map(({ dayOfWeek, sessions, breaks }) => ({
@@ -65,6 +84,7 @@ const toDoctorDto = (doctor: DoctorRecord, department: DepartmentDto): DoctorDto
   department,
   slotDurationMinutes: doctor.slotDurationMinutes,
   schedule: toPlainSchedule(doctor.schedule),
+  scheduleVersion: versionOf(doctor),
 });
 
 /** Adds each doctor's department, loading all of them in one query. */
@@ -180,9 +200,15 @@ export const updateSchedule = async (
   const current = await DoctorModel.findById(id, {
     schedule: 1,
     slotDurationMinutes: 1,
+    scheduleVersion: 1,
   }).lean();
   if (!current) {
     throw AppError.notFound(DOCTOR_NOT_FOUND);
+  }
+  // Optimistic concurrency: a change based on an older version would silently undo whatever
+  // was saved since it was loaded. The client reloads and makes its change again.
+  if (versionOf(current) !== input.scheduleVersion) {
+    throw staleScheduleError(versionOf(current));
   }
   const slotDurationMinutes = input.slotDurationMinutes ?? current.slotDurationMinutes;
   const stranded = await findStrandedAppointments(current._id, input.schedule, slotDurationMinutes);
@@ -196,13 +222,19 @@ export const updateSchedule = async (
       ? {}
       : { slotDurationMinutes: input.slotDurationMinutes }),
   };
-  const doctor = await DoctorModel.findByIdAndUpdate(
-    id,
+  // Written only if the version is still the one checked above: of two saves of the same
+  // version, exactly one gets through.
+  const doctor = await DoctorModel.findOneAndUpdate(
+    { _id: current._id, ...atVersion(input.scheduleVersion) },
     { $set: changes, $inc: { scheduleVersion: 1 } },
     { returnDocument: 'after', runValidators: true },
   ).lean();
   if (!doctor) {
-    throw AppError.notFound(DOCTOR_NOT_FOUND);
+    const latest = await DoctorModel.findById(id, { scheduleVersion: 1 }).lean();
+    if (!latest) {
+      throw AppError.notFound(DOCTOR_NOT_FOUND);
+    }
+    throw staleScheduleError(versionOf(latest));
   }
 
   const late = await findStrandedAppointments(

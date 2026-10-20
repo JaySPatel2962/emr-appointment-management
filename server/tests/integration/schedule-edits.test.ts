@@ -62,12 +62,18 @@ const setUp = async (booked: { date?: string; slotStart?: string; slotEnd?: stri
   return { doctor, appointment, admin: authorizationFor(await createUser(ROLES.SUPER_ADMIN)) };
 };
 
-const putSchedule = (
+/** Saves a schedule from the doctor's current version, as the editor does after loading it. */
+const putSchedule = async (
   admin: string,
   doctorId: string,
   body: { schedule: DaySchedule[]; slotDurationMinutes?: number },
-) =>
-  request(app).put(`/api/v1/doctors/${doctorId}/schedule`).set('Authorization', admin).send(body);
+) => {
+  const doctor = await DoctorModel.findById(doctorId, { scheduleVersion: 1 }).lean();
+  return request(app)
+    .put(`/api/v1/doctors/${doctorId}/schedule`)
+    .set('Authorization', admin)
+    .send({ ...body, scheduleVersion: doctor?.scheduleVersion ?? 0 });
+};
 
 const withDay = (dayOfWeek: number, day: Omit<DaySchedule, 'dayOfWeek'> | null): DaySchedule[] =>
   FULL_WEEK_SCHEDULE.flatMap((entry) => {

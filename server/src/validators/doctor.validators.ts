@@ -48,6 +48,12 @@ const createDoctorBody = staffAccountBody.extend({
 const updateScheduleBody = z.object({
   schedule: scheduleSchema,
   slotDurationMinutes: slotDurationSchema.optional(),
+  // The version the client loaded, from GET /doctors/:id. A save based on an older one is
+  // refused with 409, so it can't silently undo a change saved since (optimistic concurrency).
+  scheduleVersion: z
+    .number({ error: 'Send the scheduleVersion of the schedule being changed' })
+    .int()
+    .min(0),
 });
 
 const listDoctorsQuery = z.object({

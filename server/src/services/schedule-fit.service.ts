@@ -1,6 +1,7 @@
 import type { Types } from 'mongoose';
 
 import { APPOINTMENT_STATUS } from '#app/constants/appointment.js';
+import { CONFLICT_CODES } from '#app/constants/conflicts.js';
 import { AppointmentModel } from '#app/models/appointment.model.js';
 import { generateSlots } from '#app/services/slot.service.js';
 import { AppError } from '#app/utils/app-error.js';
@@ -75,5 +76,5 @@ export const strandedAppointmentsError = (stranded: readonly StrandedAppointment
     stranded.length === 1
       ? 'This schedule would leave 1 booked appointment without its slot'
       : `This schedule would leave ${String(stranded.length)} booked appointments without their slots`,
-    { appointments: stranded },
+    { code: CONFLICT_CODES.APPOINTMENTS_STRANDED, appointments: stranded },
   );

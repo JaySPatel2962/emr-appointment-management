@@ -4,7 +4,7 @@ Appointment management module for an enterprise EMR system. It covers role-based
 
 > **Status:**
 > - The backend (`server/`) is complete and tested: 215 tests, about 93% line coverage.
-> - The frontend (`client/`) is complete: login, dashboard, scheduler, booking, appointment list, and staff and schedules. 110 unit and component tests cover its logic, and 91 Playwright end-to-end tests run it against the real API.
+> - The frontend (`client/`) is complete: login, dashboard, scheduler, booking, appointment list, and staff and schedules. 110 unit and component tests cover its logic, and 92 Playwright end-to-end tests run it against the real API.
 > - A manual end-to-end QA pass, run like real clinic use against a real MongoDB, is written up in [`docs/MANUAL_TEST_REPORT.md`](docs/MANUAL_TEST_REPORT.md). It found twelve bugs, nine in the first pass and three in a retest of later changes, and all are fixed. Of its first seven questions, four were resolved by changes and three are kept and listed under [Assumptions](#assumptions) and [Known limitations](#known-limitations); two new ones are open.
 > - Design decisions are recorded in [`docs/decisions-notes.md`](docs/decisions-notes.md).
 
@@ -339,7 +339,7 @@ The integration tests prove the guarantees that matter:
 
 `npm test` in `client/` runs Vitest with Testing Library: the refresh queue, env validation, dates and the calendar, schedule rules, booking requests, the list's search boxes, and components such as the login form, the route guards, the slot grid and the table. Two of them count renders to prove the memoization works: a live update re-renders one slot tile, and a changed row re-renders one table row.
 
-`npm run e2e` in `client/` runs 91 Playwright tests in Chromium against the real API. Before the first test, global setup starts an in-memory MongoDB with its own database (`emr_appointments_e2e`) and the API on port 5100 in test mode, which never reads `server/.env`. It then seeds a clinic through the API: two doctors with morning and evening sessions and a lunch break, a receptionist and eight patients. Playwright serves a production build of the app on port 4173. Nothing touches your own database, and no `.env` is needed; ports 5100 and 4173 must be free.
+`npm run e2e` in `client/` runs 92 Playwright tests in Chromium against the real API. Before the first test, global setup starts an in-memory MongoDB with its own database (`emr_appointments_e2e`) and the API on port 5100 in test mode, which never reads `server/.env`. It then seeds a clinic through the API: two doctors with morning and evening sessions and a lunch break, a receptionist and eight patients. Playwright serves a production build of the app on port 4173. Nothing touches your own database, and no `.env` is needed; ports 5100 and 4173 must be free.
 
 What the end-to-end tests check:
 
@@ -387,5 +387,4 @@ Where the brief left room for interpretation, this build assumes the following. 
 - **No booking horizon (Q-04).** Any future day the doctor works can be booked, even years ahead (a slot in 2099 is accepted). A clinic that wants a limit would add a configurable horizon, such as 90 days, answered with 422.
 - **An empty week gives no warning (Q-01).** The schedule editor saves a week with every day switched off without asking first, and the doctor then has no slots until a day is added back.
 - **Operator-looking query parameters get 200, not 400 (Q-05).** `?search[$gt]=` or `?status[$ne]=CANCELLED` runs as if the parameter weren't there: nothing is injected, but nothing is refused either. Strict query schemas, which reject unknown parameters with 400, would be the change if a client needs to be told.
-- **Two admins saving one schedule at once: the later save wins (Q-08, open).** Each save replaces the whole week, so if two admins edit the same doctor from the same starting point, the first one's change is lost without a warning. The result is always a valid schedule that strands no booking. Sending the `scheduleVersion` the editor loaded, and refusing a stale one with 409, would close it.
 - **Searches sort their matches in memory (Q-09, open).** Every unfiltered list reads its order from an index. A search by name, mobile number or patient ID finds its rows through an index, then sorts those few matches in memory, because a prefix match on one index can't also give another field's order.

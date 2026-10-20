@@ -1,24 +1,12 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Panel } from '@/components/ui/Panel';
 import { ScheduleEditor } from '@/features/admin/components/ScheduleEditor';
+import { StaleScheduleAlert } from '@/features/admin/components/StaleScheduleAlert';
 import { StrandedAppointmentsAlert } from '@/features/admin/components/StrandedAppointmentsAlert';
-import { useSaveSchedule } from '@/features/admin/hooks/useAdminMutations';
-import { scheduleFormDefaults, scheduleFormSchema } from '@/features/admin/schemas';
-import type { ScheduleFormOutput, ScheduleFormValues } from '@/features/admin/schemas';
-import { scheduleFieldPath, toEditorDays, toSchedule } from '@/features/admin/utils/schedule-form';
-import { strandedAppointmentsIn } from '@/features/admin/utils/stranded';
-import type { StrandedAppointment } from '@/features/admin/utils/stranded';
+import { useScheduleEditor } from '@/features/admin/hooks/useScheduleEditor';
 import { useRevealOnChange } from '@/hooks/useRevealOnChange';
 import type { Doctor } from '@/types/models';
-import { applyServerFieldErrors, errorMessage } from '@/utils/form-errors';
-
-const defaultsFor = (doctor: Doctor): ScheduleFormValues =>
-  scheduleFormDefaults(doctor.slotDurationMinutes, toEditorDays(doctor.schedule));
 
 export interface EditSchedulePanelProps {
   doctor: Doctor;
@@ -26,67 +14,41 @@ export interface EditSchedulePanelProps {
 
 /** One doctor's weekly schedule, saved as a whole. Booked appointments are kept as they are. */
 export const EditSchedulePanel = ({ doctor }: EditSchedulePanelProps) => {
-  const form = useForm<ScheduleFormValues, unknown, ScheduleFormOutput>({
-    resolver: zodResolver(scheduleFormSchema),
-    defaultValues: defaultsFor(doctor),
-    mode: 'onTouched',
-  });
-  const { mutate, isPending } = useSaveSchedule();
-  const [generalError, setGeneralError] = useState<string | null>(null);
-  const [stranded, setStranded] = useState<StrandedAppointment[]>([]);
+  const { form, onSubmit, saving, problem, reload, reloading } = useScheduleEditor(doctor);
   const { isDirty } = form.formState;
-  const problemsRef = useRevealOnChange<HTMLDivElement>(
-    generalError ?? (stranded.length > 0 ? stranded : null),
-  );
-
-  const onSubmit = form.handleSubmit((values) => {
-    setGeneralError(null);
-    setStranded([]);
-    mutate(
-      {
-        id: doctor.id,
-        schedule: toSchedule(values.days),
-        slotDurationMinutes: values.slotDurationMinutes,
-      },
-      {
-        onSuccess: (saved) => {
-          form.reset(defaultsFor(saved));
-        },
-        onError: (error) => {
-          const blocking = strandedAppointmentsIn(error);
-          if (blocking.length > 0) {
-            setStranded(blocking);
-            return;
-          }
-          if (!applyServerFieldErrors(error, form.setError, scheduleFieldPath(values.days))) {
-            setGeneralError(errorMessage(error));
-          }
-        },
-      },
-    );
-  });
+  const problemRef = useRevealOnChange<HTMLDivElement>(problem);
 
   return (
     <Panel
       title={`${doctor.name}'s schedule`}
-      description="Saving replaces the whole week. A change that would leave a booked appointment without its slot is refused."
+      description="Saving replaces the whole week. A change that would leave a booked appointment without its slot is refused, and so is one made while someone else saved this schedule."
     >
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         <ScheduleEditor form={form} />
         {/* Next to the Save button, where the eye is after pressing it, not above the week. */}
-        {generalError || stranded.length > 0 ? (
-          <div ref={problemsRef} className="flex scroll-mb-20 flex-col gap-5">
-            {generalError ? <Alert tone="error">{generalError}</Alert> : null}
-            {stranded.length > 0 ? (
-              <StrandedAppointmentsAlert doctorName={doctor.name} appointments={stranded} />
+        {problem ? (
+          <div ref={problemRef} className="scroll-mb-20">
+            {problem.kind === 'general' ? <Alert tone="error">{problem.message}</Alert> : null}
+            {problem.kind === 'stranded' ? (
+              <StrandedAppointmentsAlert
+                doctorName={doctor.name}
+                appointments={problem.appointments}
+              />
+            ) : null}
+            {problem.kind === 'stale' ? (
+              <StaleScheduleAlert
+                message={problem.message}
+                onReload={() => void reload()}
+                reloading={reloading}
+              />
             ) : null}
           </div>
         ) : null}
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" disabled={!isDirty || isPending} onClick={() => form.reset()}>
+          <Button variant="secondary" disabled={!isDirty || saving} onClick={() => form.reset()}>
             Undo changes
           </Button>
-          <Button type="submit" loading={isPending} disabled={!isDirty}>
+          <Button type="submit" loading={saving} disabled={!isDirty || reloading}>
             Save schedule
           </Button>
         </div>

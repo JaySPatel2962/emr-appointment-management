@@ -50,6 +50,8 @@ export interface Doctor {
   department: Department;
   slotDurationMinutes: number;
   schedule: DaySchedule[];
+  /** Goes up with every saved schedule change; a save sends back the version it started from. */
+  scheduleVersion: number;
 }
 
 export interface Slot {

@@ -17,6 +17,16 @@ if (!('showModal' in HTMLDialogElement.prototype)) {
   });
 }
 
+// jsdom has no layout, so there is nothing to scroll: scrollIntoView() does nothing here.
+// Whether a message really scrolls into view is checked in the end-to-end tests.
+if (!('scrollIntoView' in Element.prototype)) {
+  Object.assign(Element.prototype, {
+    scrollIntoView() {
+      // Nothing to scroll.
+    },
+  });
+}
+
 // Vitest runs without globals, so Testing Library can't unmount rendered trees by itself.
 afterEach(() => {
   cleanup();

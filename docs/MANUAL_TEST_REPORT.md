@@ -30,7 +30,7 @@ An independent, manual QA pass over the EMR appointment module, against every re
   - at 768 px the appointment list had no sort control at all (BUG-12)
 - **Open questions:**
   - Q-01 to Q-07: **4 resolved** by changes (Q-02, Q-03, Q-06, Q-07) and **3 kept**, documented in the README's Assumptions and Known limitations (Q-01, Q-04, Q-05). Q-07, a doctor booked twice for the same time after a schedule edit, can no longer happen: R2-01 found 0 overlaps.
-  - The retest raised **2 new questions**: Q-08 (two admins saving one schedule at once) and Q-09 (filtered searches sort in memory).
+  - The R2 retest raised **2 more**. Q-08 (two admins saving one schedule at once) is resolved by a version check on schedule saves, retested in [R3](#r3-retest-of-the-q-08-change-and-the-booking-race). Q-09 (filtered searches sort in memory) is open.
 - **Not tested:** listed at the [end](#not-tested).
 - **Final runs after all fixes:** see [Final regression runs](#final-regression-runs).
 
@@ -487,6 +487,23 @@ The windows were 1180 px wide, and another role's window kept the scheduler open
 | R2-H-06 | At most 10 screenshots in git | Done | See [Screenshots](#screenshots) |
 | R2-H-07 | API.md, DATABASE_DESIGN.md and decisions-notes cover the nested-body 400, the foreign-origin 403, the digit rule for mobile terms, the audit role, the new indexes and the schedule-edit 409 | Done | `2465c11` adds the audit role and the origin rule to API.md and DATABASE_DESIGN.md, and the digit rule to DATABASE_DESIGN.md. The rest landed with each change. |
 
+## R3: Retest of the Q-08 change and the booking race
+
+Run on Tuesday 20 Oct from about 19:15 IST, after the change for Q-08, against the same setup as R2: the real API and a production build, a visible Chromium, and the Atlas database `emr_manual_qa` with only its name changed. The scripts are `qa/r3-*.mjs`, with their results in `qa/logs/r3-*-results.json` and their screenshots in `qa/shots-r3/` (all gitignored).
+
+### R3-01: Two admins saving one schedule (Q-08)
+
+Dr. Tara Bhatt's week was at `scheduleVersion` 1 at the start. Two admin windows had her editor open, both loaded at version 1.
+
+| ID | Steps | Expected | Actual | Result | DB evidence |
+| --- | --- | --- | --- | --- | --- |
+| R3-01a | Window 1: end Saturday at 12:00 instead of 13:00, and save | Saved | Sent `scheduleVersion` 1; `200` | PASS | Saturday ends 12:00; version 1 → 2 |
+| R3-01b | Window 2, still showing the week as loaded: end Monday's second session at 16:30, and save | Refused, nothing lost, and the editor says so | Sent `scheduleVersion` 1. `409` "The schedule changed since you opened it. Reload to see the latest.", with `meta.code` `SCHEDULE_STALE` and `meta.scheduleVersion` 2. Above the Save button, fully in view: the message, "Reloading shows the schedule as it is saved now and drops the changes made here. Make them again, then save.", and a "Reload schedule" button. The form still shows window 2's change, and Saturday as it was loaded. | PASS | Unchanged: version 2, Saturday 12:00, Monday 17:00 |
+| R3-01c | Window 2: press "Reload schedule", end Monday at 16:30 again, and save | The saved week appears, and the change then saves on top of it | The toast said "Reloaded Dr. Tara Bhatt's schedule as it is saved now". The form showed Saturday ending at 12:00 (window 1's save) and Monday at 17:00 (window 2's unsaved change dropped), with focus on "Slot length" and the alert gone. Saved again with version 2: `200`. | PASS | Saturday 12:00 **and** Monday 16:30; version 3 |
+| R3-01d | 10 rounds through the API: two saves of the same version, each with a different Saturday, at the same moment | One saves and one is refused, every round | `200`/`409` in all 10 rounds. Each 409 gave the current version. The version went up by exactly 1 per round, and the week was the winner's, whole. | PASS | Version 3 → 13 |
+| R3-01e | A save with an old version (10), and one with no version | 409, and 400 | `409` with `meta.scheduleVersion` 13. `400`: `body.scheduleVersion` "Send the scheduleVersion of the schedule being changed". | PASS | Version unchanged at 13 |
+| R3-01f | Console and network in both windows | Clean | Nothing, apart from window 2's expected 409 | PASS | |
+
 ## Bugs
 
 BUG-01 to BUG-09 were found in the first pass, and BUG-10 to BUG-12 in the R2 retest. All twelve are fixed, each in its own commit with a regression test. Each fix was retested against the running app ("Retest"), and each regression test was confirmed to fail without its fix.
@@ -510,7 +527,7 @@ In the first pass, server tests went from 174 to 184 and client unit tests to 10
 
 ## Open questions
 
-These are ambiguous against `ASSESSMENT.md`, or behaviour you may want different. Q-01 to Q-07 come from the first pass, and the Status column says what was done with each. Q-08 and Q-09 come from the R2 retest; nothing was changed for them.
+These are ambiguous against `ASSESSMENT.md`, or behaviour you may want different. Q-01 to Q-07 come from the first pass and Q-08 and Q-09 from the R2 retest. The Status column says what was done with each.
 
 | Q | Behaviour seen | Options | Status |
 | --- | --- | --- | --- |
@@ -521,7 +538,7 @@ These are ambiguous against `ASSESSMENT.md`, or behaviour you may want different
 | Q-05 | **Operator-looking query parameters get 200, not 400** (F-11b). `?search[$gt]=` is a literal unknown key that the schema ignores, so the request runs without that filter. Nothing is injected, but the brief expects 400. JSON bodies with operators do get 400 (F-11a). | (a) Keep: unknown parameters are ignored, as documented. (b) Strict query schemas: unknown or bracketed parameters get 400. | **Kept** (a): README "Assumptions" and "Known limitations", and API.md's input rules (`aed025d`) |
 | Q-06 | **COLLSCAN on lists without a filter** (G-06): the default appointment list, the sorts by patient name and by `createdAt`, and the patient list without a term. Harmless at this size; DATABASE_DESIGN.md §10 measured 160 ms at 43,000 appointments. | (a) Keep for clinic scale. (b) Apply the documented index changes (`{date, slotStart, _id}`, `{patientNameLower, _id}`, `{nameLower, _id}`), add `{createdAt, _id}`, and use `estimatedDocumentCount` for unfiltered totals. | **Resolved** with (b): `ccb6a9f`, then 0 COLLSCAN in R2-02. Sorting of filtered searches: see Q-09. |
 | Q-07 | **Schedule edits with booked appointments** (A-20). Booked appointments never move, are never flagged, and nothing can be undone safely. An appointment off the new grid disappears from the day sheet, though it stays in the list. Slots overlapping a booked visit are offered, so a doctor can end up with **two patients at the same time** (A-20b). Removing a day strands its bookings. The double-booking index only compares start times. | (a) Keep, and document it (the current state). (b) Refuse a change that strands active future appointments: 409, listing them. (c) Allow it, but list the affected appointments for rebooking and show off-grid bookings on the day sheet. (d) Work out availability by time overlap, so a slot overlapping any active appointment is BOOKED, and check the overlap in the booking transaction. That closes the overlap however the grid changes. | **Resolved** with (b): `ddb27d1`, including a race between an edit and a booking. Retested in R2-01, which found BUG-10. |
-| Q-08 | **Two admins saving one schedule at once: the later save wins** (R2-01l). Both editors were opened on the same week, and each changed a different day. The second save replaced the whole week, so the first admin's change was lost without a word, although both saw "Schedule saved". The result is always a valid schedule that strands no booking (R2-01l, R2-01n). | (a) Keep: one Super Admin usually manages schedules, and the editor reloads after a save. (b) Optimistic concurrency: the editor sends the `scheduleVersion` it loaded, and a mismatch gets 409 "This schedule was changed by someone else. Reload it, then make your change again", shown the way the stranded-booking refusal is. | Open |
+| Q-08 | **Two admins saving one schedule at once: the later save wins** (R2-01l). Both editors were opened on the same week, and each changed a different day. The second save replaced the whole week, so the first admin's change was lost without a word, although both saw "Schedule saved". The result is always a valid schedule that strands no booking (R2-01l, R2-01n). | (a) Keep: one Super Admin usually manages schedules, and the editor reloads after a save. (b) Optimistic concurrency: the editor sends the `scheduleVersion` it loaded, and a mismatch gets 409 "This schedule was changed by someone else. Reload it, then make your change again", shown the way the stranded-booking refusal is. | **Resolved** with (b): `fix: refuse stale schedule saves`. A save sends the version it loaded; an outdated one gets 409 and the editor offers "Reload schedule". Retested in R3-01. |
 | Q-09 | **Filtered searches sort in memory** (R2-02a). 10 of the 37 shapes find their rows through an index and then sort the matches in memory (at most 34 documents here): the patient word, mobile and code searches, and the list filtered by status but sorted by patient name. Every unfiltered list and every sort of the full list reads its order from an index. A prefix match is a range on one index, so that index can't also supply another field's order. | (a) Keep: a search returns few rows, and MongoDB's in-memory sort limit (100 MB) is far away. (b) Add compound indexes for the equality filters with each sort, for example `{status, patientNameLower, _id}`: up to 5 more per filter, each slowing writes. (c) For broad terms (one letter), let the query walk the sort's index and filter as it goes: cheaper for broad terms, worse for selective ones. | Open |
 
 Smaller observations, not bugs:

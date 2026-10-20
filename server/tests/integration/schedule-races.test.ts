@@ -55,7 +55,7 @@ describe('a booking and a schedule change at the same moment', () => {
     const res = await request(app)
       .put(`/api/v1/doctors/${doctor._id.toString()}/schedule`)
       .set('Authorization', admin)
-      .send({ schedule: FULL_WEEK_SCHEDULE, slotDurationMinutes: 20 });
+      .send({ schedule: FULL_WEEK_SCHEDULE, slotDurationMinutes: 20, scheduleVersion: 0 });
 
     expect(res.status).toBe(409);
     const saved = await DoctorModel.findById(doctor._id).lean();

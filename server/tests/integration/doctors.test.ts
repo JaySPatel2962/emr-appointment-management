@@ -32,6 +32,7 @@ const doctorSchema = z.object({
       breaks: z.array(rangeSchema),
     }),
   ),
+  scheduleVersion: z.number(),
 });
 const doctorListSchema = z.array(doctorSchema);
 
@@ -228,10 +229,14 @@ describe('PUT /api/v1/doctors/:id/schedule', () => {
     const res = await request(app)
       .put(`${DOCTORS_URL}/${doctor._id.toString()}/schedule`)
       .set('Authorization', await asAdmin())
-      .send({ schedule, slotDurationMinutes: 20 });
+      .send({ schedule, slotDurationMinutes: 20, scheduleVersion: 0 });
 
     expect(res.status).toBe(200);
-    expect(dataOf(res, doctorSchema)).toMatchObject({ schedule, slotDurationMinutes: 20 });
+    expect(dataOf(res, doctorSchema)).toMatchObject({
+      schedule,
+      slotDurationMinutes: 20,
+      scheduleVersion: 1,
+    });
     const audit = await AuditLogModel.findOne({
       action: AUDIT_ACTIONS.UPDATE,
       entityId: doctor._id,
@@ -243,7 +248,7 @@ describe('PUT /api/v1/doctors/:id/schedule', () => {
     const res = await request(app)
       .put(`${DOCTORS_URL}/${UNKNOWN_ID}/schedule`)
       .set('Authorization', await asAdmin())
-      .send({ schedule: mondaySchedule });
+      .send({ schedule: mondaySchedule, scheduleVersion: 0 });
 
     expect(res.status).toBe(404);
   });

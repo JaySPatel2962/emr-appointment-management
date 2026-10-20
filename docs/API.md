@@ -708,7 +708,8 @@ curl -X POST "$BASE_URL/doctors" \
         "breaks": [{ "start": "12:00", "end": "13:00" }]
       },
       { "dayOfWeek": 3, "sessions": [{ "start": "10:00", "end": "14:00" }], "breaks": [] }
-    ]
+    ],
+    "scheduleVersion": 0
   },
   "meta": {}
 }
@@ -829,7 +830,8 @@ curl "$BASE_URL/doctors?departmentId=6ad4b1a2c42b65083c36c4d8&search=cardio&page
           "breaks": [{ "start": "12:00", "end": "13:00" }]
         },
         { "dayOfWeek": 3, "sessions": [{ "start": "10:00", "end": "14:00" }], "breaks": [] }
-      ]
+      ],
+      "scheduleVersion": 0
     }
   ],
   "meta": { "page": 1, "limit": 10, "total": 1, "totalPages": 1 }
@@ -900,7 +902,8 @@ curl "$BASE_URL/doctors/6ad4b1a4c42b65083c36c4e6" \
         "breaks": [{ "start": "12:00", "end": "13:00" }]
       },
       { "dayOfWeek": 3, "sessions": [{ "start": "10:00", "end": "14:00" }], "breaks": [] }
-    ]
+    ],
+    "scheduleVersion": 0
   },
   "meta": {}
 }
@@ -948,6 +951,8 @@ curl "$BASE_URL/doctors/6ad4b1a4c42b65083c36c4e6" \
 
 Replaces a doctor's whole weekly schedule and, optionally, the slot length. A change that would leave a booked appointment without its slot is refused with `409`, listing those appointments. Here, "without its slot" means that no slot in the new grid has the appointment's date, start **and** end. Only appointments still to happen count: SCHEDULED or ARRIVED, dated today or later. Completed, cancelled and earlier appointments never block a change.
 
+**Saves can't overwrite each other.** Every doctor has a `scheduleVersion`, which starts at 0 and goes up with each saved change. A change sends the version it was based on, as read from `GET /doctors/:id` (or the last save). If someone else has saved since, the change is refused with `409` and nothing is saved; `meta.scheduleVersion` gives the current version. The client then reloads the schedule and makes its change again. Without this, of two admins editing the same week, the later save would silently undo the earlier one. Of two saves of the same version sent at the same moment, exactly one succeeds.
+
 - **Roles:** SUPER_ADMIN
 - **Headers:** `Authorization: Bearer <accessToken>`, `Content-Type: application/json`
 - **Path parameters:** `id`, the doctor's id
@@ -958,6 +963,7 @@ Replaces a doctor's whole weekly schedule and, optionally, the slot length. A ch
 | --- | --- | --- | --- |
 | `schedule` | array | yes | The new weekly schedule, with the same fields and [schedule rules](#post-doctors) as when creating a doctor. `[]` removes every working day. |
 | `slotDurationMinutes` | integer | no | 5 to 240. Unchanged if left out. |
+| `scheduleVersion` | integer | yes | The doctor's `scheduleVersion` the change is based on, from `GET /doctors/:id` or the last save. 0 or more. |
 
 **Example request**
 
@@ -1008,7 +1014,8 @@ curl -X PUT "$BASE_URL/doctors/6ad4b1a4c42b65083c36c4e6/schedule" \
         "breaks": []
       }
     ],
-    "slotDurationMinutes": 15
+    "slotDurationMinutes": 15,
+    "scheduleVersion": 0
   }'
 ```
 
@@ -1035,7 +1042,8 @@ curl -X PUT "$BASE_URL/doctors/6ad4b1a4c42b65083c36c4e6/schedule" \
       },
       { "dayOfWeek": 3, "sessions": [{ "start": "10:00", "end": "14:00" }], "breaks": [] },
       { "dayOfWeek": 5, "sessions": [{ "start": "09:00", "end": "13:00" }], "breaks": [] }
-    ]
+    ],
+    "scheduleVersion": 1
   },
   "meta": {}
 }
@@ -1049,14 +1057,30 @@ curl -X PUT "$BASE_URL/doctors/6ad4b1a4c42b65083c36c4e6/schedule" \
 | 401 | `Authentication required` | No valid access token |
 | 403 | `You do not have permission to perform this action` | The caller is not a SUPER_ADMIN |
 | 404 | `Doctor not found` | No doctor with this id |
-| 409 | `This schedule would leave <n> booked appointment(s) without their slot(s)` | The new grid has no slot with the same date, start and end for a SCHEDULED or ARRIVED appointment dated today or later. `meta.appointments` lists them. Nothing is saved. |
+| 409 | `The schedule changed since you opened it. Reload to see the latest.` | `scheduleVersion` is not the current one: someone saved the schedule since it was read. `meta.code` is `SCHEDULE_STALE` and `meta.scheduleVersion` the current version. Nothing is saved. Checked before the appointments. |
+| 409 | `This schedule would leave <n> booked appointment(s) without their slot(s)` | The new grid has no slot with the same date, start and end for a SCHEDULED or ARRIVED appointment dated today or later. `meta.code` is `APPOINTMENTS_STRANDED`, and `meta.appointments` lists them. Nothing is saved. |
 
 A change saved at the same moment as a booking for a slot it removes is caught too. The change re-checks the appointments once saved, and puts the previous schedule back if a booking it missed would be stranded. The booking re-checks its slot once saved, and is undone with `422` if the slot is gone.
 
 <details>
 <summary>Example error responses</summary>
 
-`409 Conflict`
+`409 Conflict`, saved by someone else since version 1 was read:
+
+```json
+{
+  "success": false,
+  "message": "The schedule changed since you opened it. Reload to see the latest.",
+  "data": null,
+  "meta": {
+    "requestId": "c1f0e7d2-58a4-4c6b-9a2e-7d3b1e9f0a44",
+    "code": "SCHEDULE_STALE",
+    "scheduleVersion": 2
+  }
+}
+```
+
+`409 Conflict`, a booking would lose its slot:
 
 ```json
 {
@@ -1065,6 +1089,7 @@ A change saved at the same moment as a booking for a slot it removes is caught t
   "data": null,
   "meta": {
     "requestId": "5b0d6e57-2a3c-4b5f-9d1e-7f0a4c2b8e11",
+    "code": "APPOINTMENTS_STRANDED",
     "appointments": [
       {
         "id": "6ad52b9e5099159b77ebd84e",
@@ -2609,6 +2634,7 @@ The booking for "Palpitations" got `201 Created` and became appointment `6ad4b1a
 - **Cancelling frees the slot at once**, because cancelled appointments are not in the unique index.
 - **Status changes are atomic too.** Two simultaneous cancellations of one appointment give one `200` and one `409 This appointment is cancelled and cannot be cancelled`.
 - **Refresh tokens can be used once.** Of two simultaneous refreshes with the same cookie, only one succeeds.
+- **Schedule changes can't overwrite each other.** Each sends the `scheduleVersion` it was based on, and the update is written only if that is still the current version. Of two changes based on the same version, one gets `200` and the other `409 The schedule changed since you opened it. Reload to see the latest.` ([PUT /doctors/:id/schedule](#put-doctorsidschedule)).
 
 The test suite checks this through the HTTP API: of 10 parallel bookings for one slot, exactly one gets `201` and nine get `409`.
 
@@ -2858,7 +2884,7 @@ interface ClientToServerEvents {
 | 401 | Not authenticated | `Authentication required`, `Invalid token`, `Token has expired`, `Invalid email or password`, `Refresh token missing`, `Your session has expired, please log in again` |
 | 403 | Authenticated, but the role or doctor scope doesn't allow it; or a cookie endpoint called from another site | `You do not have permission to perform this action`, `Doctors can only update consultation notes`, `Doctors can only view their own slots`, `Cross-site requests are not allowed` |
 | 404 | Not found, or outside a doctor's scope | `Doctor not found`, `Doctor not found in this department`, `Patient not found`, `Appointment not found`, `Route not found: <METHOD> <path>` |
-| 409 | Conflicts with the current state | `Slot already booked`, `This appointment is <status> and cannot be <action>`, `A record with the same email already exists`, `This schedule would leave <n> booked appointment(s) without their slot(s)` (with `meta.appointments`) |
+| 409 | Conflicts with the current state | `Slot already booked`, `This appointment is <status> and cannot be <action>`, `A record with the same email already exists`, `This schedule would leave <n> booked appointment(s) without their slot(s)` (with `meta.appointments`), `The schedule changed since you opened it. Reload to see the latest.` (with `meta.scheduleVersion`). Where a client must tell these apart, `meta.code` names the reason. |
 | 413 | The body is larger than `BODY_LIMIT` (default 100 KB) | `Request body is too large` |
 | 422 | Valid input that breaks a scheduling rule | `This time is not a slot in the doctor's schedule`, `This slot is in the past`, `The doctor does not belong to this department`, `Department not found`, `Slots cannot be shown for a past date` |
 | 429 | Rate limit reached | `Too many requests, please try again later` |
