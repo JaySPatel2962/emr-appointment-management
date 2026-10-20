@@ -117,7 +117,7 @@ Client (run in `client/`):
 ## Backend status
 All backend phases are done and committed on `feat/backend`. With the later fixes on `feat/frontend`, 215 tests pass, about 93% line coverage.
 - Done: 0 tooling, 1 foundation (env, errors, security, health), 2 models and indexes, 3 auth, 4 doctors, receptionists and departments, 5 slot generation, 6 appointments and patients, 7 Socket.IO, 8 concurrency, RBAC and end-to-end tests
-- Not done yet: `ENGINEERING_DECISIONS.md`, the README's future section, a git remote (its Assumptions and Known limitations sections exist). The frontend's progress is under Frontend status below.
+- `ENGINEERING_DECISIONS.md` (repo root) answers the brief's seven questions, from `docs/decisions-notes.md`. Not done yet: the README's future section and a git remote. The frontend's progress is under Frontend status below.
 - Design decisions: `docs/decisions-notes.md`
 
 ### Response shapes
