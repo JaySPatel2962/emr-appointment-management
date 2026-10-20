@@ -5,12 +5,10 @@ import { Button } from '@/components/ui/Button';
 import { FormField } from '@/components/ui/FormField';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
-import { GENDER_LABELS } from '@/constants/patient';
 import { usePatientSearch } from '@/features/patients/queries';
-import { formatMobile } from '@/features/patients/utils/mobile';
+import { patientSummary } from '@/features/patients/utils/summary';
 import { useClinicClock } from '@/hooks/useClinicClock';
 import type { Patient } from '@/types/models';
-import { ageOn } from '@/utils/date';
 
 /** What a search term says about a new patient: digits are a mobile number, words a name. */
 const prefillFrom = (term: string): { name: string; mobile: string } => {
@@ -19,16 +17,6 @@ const prefillFrom = (term: string): { name: string; mobile: string } => {
   }
   return /^[+\d\s().-]+$/.test(term) ? { name: '', mobile: term } : { name: term, mobile: '' };
 };
-
-const describe = (patient: Patient, today: string): string =>
-  [
-    patient.patientCode,
-    formatMobile(patient.mobile),
-    GENDER_LABELS[patient.gender],
-    patient.dateOfBirth ? `${String(ageOn(patient.dateOfBirth, today))} years` : null,
-  ]
-    .filter(Boolean)
-    .join(', ');
 
 export interface PatientSearchProps {
   selected: Patient | null;
@@ -55,7 +43,7 @@ export const PatientSearch = ({ selected, onSelect, onRegister, error }: Patient
           <UserRound aria-hidden="true" size={20} className="shrink-0 text-carbon" />
           <div className="min-w-0">
             <p className="font-semibold wrap-anywhere text-ink">{selected.name}</p>
-            <p className="text-xs text-ink-muted tabular-nums">{describe(selected, today)}</p>
+            <p className="text-xs text-ink-muted tabular-nums">{patientSummary(selected, today)}</p>
           </div>
         </div>
         <Button variant="secondary" size="sm" onClick={() => onSelect(null)}>
@@ -123,7 +111,7 @@ export const PatientSearch = ({ selected, onSelect, onRegister, error }: Patient
                       {patient.name}
                     </span>
                     <span className="block text-xs text-ink-muted tabular-nums">
-                      {describe(patient, today)}
+                      {patientSummary(patient, today)}
                     </span>
                   </span>
                 </label>

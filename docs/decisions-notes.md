@@ -184,7 +184,7 @@ Every index exists because a query needs it, since each extra index slows writes
   - An appointment can be completed only after the patient has arrived. A no-show is cancelled, not completed.
   - Arrival can be marked on any date, not only on the appointment day. A stricter clinic could require the dates to match.
 - **Who sees patients.** Patient search is for Super Admins and receptionists. Doctors see a patient's details through their own appointments (`GET /appointments/:id`). Without a search term, the patient list shows everyone, sorted by name.
-- **New patients.** The mobile number is normalized before saving, and a date of birth can't be in the future.
+- **New patients.** The mobile number is normalized before saving, and a date of birth can't be in the future. Two patients may share a mobile number, because families often do; the booking form asks "Is it one of these?" instead of refusing (manual QA, Q-02).
 - **Notes are in the appointment list and detail,** which only signed-in staff can read, but never in Socket.IO events.
 - **Doctor scoping is forced in the service**, in every query (list, detail, update, status change), not left to the controllers. A doctor's `doctorId` and `doctorName` filters are ignored, and another doctor's appointment gets a 404.
 - **Filters are joined with `$and`**, one condition each, so no filter can overwrite another's field. The Phase 4 bug came from spreading two `_id` conditions into one object.
@@ -406,6 +406,7 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Booking.** The doctor, date and slot live in the URL, through the same hook the scheduler uses, so a slot in the scheduler is a link that fills the form in. The form itself holds the patient and the visit.
   - Both kinds of patient keep their fields in the form, so switching between "Existing patient" and "New patient" loses nothing. Only the chosen kind is validated (zod `superRefine`), and all errors show at once.
   - Patient search waits 300 ms after typing stops and starts at two characters. When nothing matches, "Register a new patient" fills in what was typed: digits go to the mobile number, words to the name.
+  - In the new-patient form, a complete mobile number that is already registered brings up "Is it one of these?" with those patients (`useMobileMatches`). Choosing one switches the form to that existing patient and moves focus to the "Existing patient" choice. The hint never blocks registration, because families often share one number. Partial numbers are not looked up, and the hint goes as soon as the number changes. It uses the search's query key, so a number looked up in either place is cached for both.
   - A 409 or 422 (the slot was just taken, or has started) keeps everything typed. The slots are refetched, the chosen time is cleared, and an alert explains what happened.
   - Field errors from a 400 appear on their own fields.
   - After a successful booking, a toast confirms it and the scheduler opens on that day, where the slot is already BOOKED.

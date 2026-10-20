@@ -1,11 +1,15 @@
-import type { FieldErrors, UseFormRegister } from 'react-hook-form';
+import { useWatch } from 'react-hook-form';
+import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form';
 
 import { FormField } from '@/components/ui/FormField';
 import { Input } from '@/components/ui/Input';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { GENDER_LABELS, GENDERS, NAME_MAX_LENGTH } from '@/constants/patient';
+import { MobileMatches } from '@/features/booking/components/MobileMatches';
 import type { BookingFormValues } from '@/features/booking/schemas';
+import { useMobileMatches } from '@/features/patients/queries';
 import { useClinicClock } from '@/hooks/useClinicClock';
+import type { Patient } from '@/types/models';
 
 const GENDER_OPTIONS = Object.values(GENDERS).map((gender) => ({
   value: gender,
@@ -15,11 +19,21 @@ const GENDER_OPTIONS = Object.values(GENDERS).map((gender) => ({
 export interface NewPatientFieldsProps {
   register: UseFormRegister<BookingFormValues>;
   errors: FieldErrors<BookingFormValues>;
+  control: Control<BookingFormValues>;
+  /** Book for a registered patient with the same mobile number instead. */
+  onChooseExisting: (patient: Patient) => void;
 }
 
 /** A patient registered as part of the booking: one transaction, so a failed booking leaves no record. */
-export const NewPatientFields = ({ register, errors }: NewPatientFieldsProps) => {
+export const NewPatientFields = ({
+  register,
+  errors,
+  control,
+  onChooseExisting,
+}: NewPatientFieldsProps) => {
   const { date: today } = useClinicClock();
+  const mobile = useWatch({ control, name: 'newPatient.mobile' });
+  const matches = useMobileMatches(mobile);
   const fieldErrors = errors.newPatient;
 
   return (
@@ -54,6 +68,11 @@ export const NewPatientFields = ({ register, errors }: NewPatientFieldsProps) =>
           <Input {...control} {...register('newPatient.dateOfBirth')} type="date" max={today} />
         )}
       </FormField>
+      {matches.total > 0 ? (
+        <div className="sm:col-span-2">
+          <MobileMatches matches={matches} onChoose={onChooseExisting} />
+        </div>
+      ) : null}
       <div className="sm:col-span-2">
         <RadioGroup
           legend="Gender"

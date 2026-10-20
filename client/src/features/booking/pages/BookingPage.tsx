@@ -44,6 +44,7 @@ export const BookingPage = () => {
   const {
     register,
     setValue,
+    setFocus,
     control,
     formState: { errors, isSubmitted },
   } = form;
@@ -52,6 +53,14 @@ export const BookingPage = () => {
   const choosePatient = (next: Patient | null) => {
     setPatient(next);
     setValue('patientId', next?.id ?? '', { shouldValidate: isSubmitted });
+  };
+
+  // From the "Is it one of these?" hint: the form turns to that registered patient, and focus
+  // goes to the "Existing patient" choice, which says what happened.
+  const chooseExisting = (existing: Patient) => {
+    choosePatient(existing);
+    setValue('patientMode', 'existing');
+    setFocus('patientMode');
   };
 
   const registerNew = (prefill: { name: string; mobile: string }) => {
@@ -100,7 +109,12 @@ export const BookingPage = () => {
                   error={errors.patientId?.message}
                 />
               ) : (
-                <NewPatientFields register={register} errors={errors} />
+                <NewPatientFields
+                  register={register}
+                  errors={errors}
+                  control={control}
+                  onChooseExisting={chooseExisting}
+                />
               )}
             </div>
           </Panel>

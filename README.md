@@ -339,14 +339,14 @@ The integration tests prove the guarantees that matter:
 
 `npm test` in `client/` runs Vitest with Testing Library: the refresh queue, env validation, dates and the calendar, schedule rules, booking requests, the list's search boxes, and components such as the login form, the route guards, the slot grid and the table. Two of them count renders to prove the memoization works: a live update re-renders one slot tile, and a changed row re-renders one table row.
 
-`npm run e2e` in `client/` runs 82 Playwright tests in Chromium against the real API. Before the first test, global setup starts an in-memory MongoDB with its own database (`emr_appointments_e2e`) and the API on port 5100 in test mode, which never reads `server/.env`. It then seeds a clinic through the API: two doctors with morning and evening sessions and a lunch break, a receptionist and eight patients. Playwright serves a production build of the app on port 4173. Nothing touches your own database, and no `.env` is needed; ports 5100 and 4173 must be free.
+`npm run e2e` in `client/` runs 84 Playwright tests in Chromium against the real API. Before the first test, global setup starts an in-memory MongoDB with its own database (`emr_appointments_e2e`) and the API on port 5100 in test mode, which never reads `server/.env`. It then seeds a clinic through the API: two doctors with morning and evening sessions and a lunch break, a receptionist and eight patients. Playwright serves a production build of the app on port 4173. Nothing touches your own database, and no `.env` is needed; ports 5100 and 4173 must be free.
 
 What the end-to-end tests check:
 
 - **Auth:** each role's login, a wrong password, the redirect back after login, a reload keeping the session, logout (in every tab), an expired access token renewed silently, and no token in web storage
 - **Access by role:** each role's menu, the 403 page for another role's page, a doctor seeing only their own appointments, and the 404 page
 - **Scheduler:** department and doctor filters kept in the URL, past days that can't be chosen, past, free and booked slots that look different, no slots in breaks, a doctor's day off, and the clinic's clock deciding "today" whatever the browser's timezone
-- **Booking:** finding a patient by ID, mobile or name, a debounced search, registering a new patient, validation, the confirmation, and the slot showing as booked
+- **Booking:** finding a patient by ID, mobile or name, a debounced search, registering a new patient, the "Is it one of these?" hint for a registered mobile number, validation, the confirmation, and the slot showing as booked
 - **Double booking:** two windows book one slot at the same moment; exactly one succeeds, and the other is told and sees the slot taken
 - **Live updates:** a booking, an update and a cancellation in another window appear without a reload; a window that changes day or page leaves the old room
 - **Appointment list:** paging and sorting on the server, every filter, the typing pause, the URL kept across a reload, and the loading, empty and error states

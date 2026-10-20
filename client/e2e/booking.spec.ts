@@ -134,3 +134,24 @@ test('a search without a match offers to register that patient', async ({ page }
   await expect(page.getByLabel('Full name')).toHaveValue('Zara Ali');
   await expect(pageHeading(page, 'Book an appointment')).toBeVisible();
 });
+
+// Found in manual QA (Q-02): nothing said that the mobile number was already registered.
+test('a registered mobile number asks "Is it one of these?" and switches to that patient', async ({
+  page,
+}) => {
+  const { doctors } = seedInfo();
+  await openAs(page, RECEPTIONIST, bookingPath(doctors.kavya.id, DAY));
+  await choosePatientMode(page, 'New patient');
+  const hint = page.getByRole('status').filter({ hasText: 'Is it one of these?' });
+
+  await page.getByLabel('Mobile number').fill(`+91 ${PATIENTS.asha.mobile}`);
+  await expect(hint).toContainText('A registered patient has this mobile number.');
+
+  await hint.getByRole('button', { name: `Choose ${PATIENTS.asha.name}` }).click();
+
+  const existing = page.getByRole('radio', { name: 'Existing patient' });
+  await expect(existing).toBeChecked();
+  await expect(existing).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Change patient' })).toBeVisible();
+  await expect(page.getByText(PATIENTS.asha.name, { exact: true })).toBeVisible();
+});
