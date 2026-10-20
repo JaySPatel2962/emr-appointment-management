@@ -63,10 +63,13 @@ export const Tabs = <V extends string>({
 
   return (
     <div>
+      {/* The bottom line is an inset shadow, not a border the tabs overlap with a negative
+          margin: that 1px of overflow made the scrolling list show a vertical scrollbar on
+          systems with classic scrollbars, such as Windows. */}
       <div
         role="tablist"
         aria-label={label}
-        className="flex gap-1 overflow-x-auto border-b border-line"
+        className="flex gap-1 overflow-x-auto shadow-[inset_0_-1px_0_var(--color-line)]"
       >
         {items.map((item, index) => {
           const selected = item.value === value;
@@ -89,7 +92,7 @@ export const Tabs = <V extends string>({
               onClick={() => onChange(item.value)}
               onKeyDown={(event) => handleKey(event, index)}
               className={cn(
-                '-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
+                'border-b-2 px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
                 selected
                   ? 'border-carbon text-carbon'
                   : 'border-transparent text-ink-muted hover:text-ink',

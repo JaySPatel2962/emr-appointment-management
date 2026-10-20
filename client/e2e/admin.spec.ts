@@ -179,6 +179,11 @@ test('the admin page opens on the tab and doctor its address names', async ({ pa
     'true',
   );
 
+  // Found in manual QA: the tab list overflowed by 1px, which shows a vertical scrollbar on
+  // systems with classic scrollbars (Windows). It must not scroll vertically at all.
+  const tabList = page.getByRole('tablist', { name: 'Staff and schedules' });
+  expect(await tabList.evaluate((list) => list.scrollHeight - list.clientHeight)).toBe(0);
+
   await page.getByRole('tab', { name: 'Add a doctor' }).click();
   await expect(page).toHaveURL('/admin?tab=doctor');
   await page.reload();
