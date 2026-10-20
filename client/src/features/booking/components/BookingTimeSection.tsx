@@ -1,5 +1,3 @@
-import { useEffect, useRef } from 'react';
-
 import { Alert } from '@/components/ui/Alert';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
 import { SLOT_STATUS } from '@/constants/slot';
@@ -11,6 +9,7 @@ import { useDoctorDay } from '@/features/slots/hooks/useDoctorDay';
 import type { SlotSearch } from '@/features/slots/utils/slot-search';
 import { slotStatusAt } from '@/features/slots/utils/slot-state';
 import { useClinicClock } from '@/hooks/useClinicClock';
+import { useRevealOnChange } from '@/hooks/useRevealOnChange';
 
 export interface BookingTimeSectionProps {
   selection: SlotSearch;
@@ -32,18 +31,12 @@ export const BookingTimeSection = ({
   const { doctorId, date, slot } = selection;
   const { doctor, day, slots, slotsQuery } = useDoctorDay(doctorId, date);
   const now = useClinicClock();
-  const problemRef = useRef<HTMLDivElement>(null);
+  const problemRef = useRevealOnChange<HTMLDivElement>(slotProblem, 'center');
 
   // A slot can be taken while the form is open: live updates turn it BOOKED under the user.
   const chosen = slot === null ? undefined : slots?.find((candidate) => candidate.start === slot);
   const chosenGone =
     chosen !== undefined && slotStatusAt(chosen, date, now) !== SLOT_STATUS.AVAILABLE;
-
-  useEffect(() => {
-    if (slotProblem !== null) {
-      problemRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }
-  }, [slotProblem]);
 
   return (
     <div className="flex flex-col gap-5">

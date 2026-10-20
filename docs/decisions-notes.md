@@ -441,6 +441,7 @@ Every index exists because a query needs it, since each extra index slows writes
   - An API error on `body.schedule.N` is mapped from the N-th working day back to the editor's row.
   - Creating a doctor uses three separately typed forms (account, profile, schedule), validated together, with focus on the first problem in reading order. A typed form per part means no casts; the alternative was RHF's form context.
   - A taken email (409) shows on the email field. Saving a schedule refetches every cached slot grid, since the slots themselves change.
+  - Errors that aren't about one field (a refusal that lists the bookings a change would strand, a server error) show directly above the Save or Add doctor button, and scroll fully into view (`useRevealOnChange`). Both forms are taller than a screen, and the manual retest found these errors at the top of the form, out of view of the button just pressed. The booking form's slot problem uses the same hook.
 - **Container queries where a component lives in more than one width.**
   - The table switches between cards and rows at a container width of 48rem, not at a screen width, because the same table sits beside the sidebar on a desktop and alone on a tablet.
   - The doctor, department and date fields stack in the booking form's narrow column, and line up in the scheduler's wide panel.

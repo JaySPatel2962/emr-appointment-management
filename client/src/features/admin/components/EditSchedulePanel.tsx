@@ -13,6 +13,7 @@ import type { ScheduleFormOutput, ScheduleFormValues } from '@/features/admin/sc
 import { scheduleFieldPath, toEditorDays, toSchedule } from '@/features/admin/utils/schedule-form';
 import { strandedAppointmentsIn } from '@/features/admin/utils/stranded';
 import type { StrandedAppointment } from '@/features/admin/utils/stranded';
+import { useRevealOnChange } from '@/hooks/useRevealOnChange';
 import type { Doctor } from '@/types/models';
 import { applyServerFieldErrors, errorMessage } from '@/utils/form-errors';
 
@@ -34,6 +35,9 @@ export const EditSchedulePanel = ({ doctor }: EditSchedulePanelProps) => {
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [stranded, setStranded] = useState<StrandedAppointment[]>([]);
   const { isDirty } = form.formState;
+  const problemsRef = useRevealOnChange<HTMLDivElement>(
+    generalError ?? (stranded.length > 0 ? stranded : null),
+  );
 
   const onSubmit = form.handleSubmit((values) => {
     setGeneralError(null);
@@ -68,11 +72,16 @@ export const EditSchedulePanel = ({ doctor }: EditSchedulePanelProps) => {
       description="Saving replaces the whole week. A change that would leave a booked appointment without its slot is refused."
     >
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
-        {generalError ? <Alert tone="error">{generalError}</Alert> : null}
-        {stranded.length > 0 ? (
-          <StrandedAppointmentsAlert doctorName={doctor.name} appointments={stranded} />
-        ) : null}
         <ScheduleEditor form={form} />
+        {/* Next to the Save button, where the eye is after pressing it, not above the week. */}
+        {generalError || stranded.length > 0 ? (
+          <div ref={problemsRef} className="flex scroll-mb-20 flex-col gap-5">
+            {generalError ? <Alert tone="error">{generalError}</Alert> : null}
+            {stranded.length > 0 ? (
+              <StrandedAppointmentsAlert doctorName={doctor.name} appointments={stranded} />
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="secondary" disabled={!isDirty || isPending} onClick={() => form.reset()}>
             Undo changes

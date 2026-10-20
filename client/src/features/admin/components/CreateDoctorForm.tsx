@@ -31,6 +31,7 @@ import type {
 import { applyAccountErrors } from '@/features/admin/utils/account-errors';
 import { scheduleFieldPath, standardWeek, toSchedule } from '@/features/admin/utils/schedule-form';
 import { useDepartments } from '@/features/departments/queries';
+import { useRevealOnChange } from '@/hooks/useRevealOnChange';
 import { hasStatus } from '@/services/api-error';
 import type { Doctor } from '@/types/models';
 import { applyServerFieldErrors, errorMessage } from '@/utils/form-errors';
@@ -65,6 +66,7 @@ export const CreateDoctorForm = ({ onCreated }: CreateDoctorFormProps) => {
   const { data: departments = [] } = useDepartments();
   const { mutate, isPending } = useCreateDoctor();
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const generalErrorRef = useRevealOnChange<HTMLDivElement>(generalError);
 
   const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -123,7 +125,6 @@ export const CreateDoctorForm = ({ onCreated }: CreateDoctorFormProps) => {
 
   return (
     <form noValidate onSubmit={(event) => void submit(event)} className="flex flex-col gap-6">
-      {generalError ? <Alert tone="error">{generalError}</Alert> : null}
       <Panel title="Account" description="What the doctor logs in with.">
         <div className="grid max-w-3xl gap-5 md:grid-cols-2">
           <AccountFields form={account} />
@@ -166,6 +167,12 @@ export const CreateDoctorForm = ({ onCreated }: CreateDoctorFormProps) => {
       >
         <ScheduleEditor form={schedule} />
       </Panel>
+      {/* Next to the Add doctor button, where the eye is after pressing it. */}
+      {generalError ? (
+        <div ref={generalErrorRef} className="scroll-mb-20">
+          <Alert tone="error">{generalError}</Alert>
+        </div>
+      ) : null}
       <div>
         <Button type="submit" loading={isPending}>
           Add doctor

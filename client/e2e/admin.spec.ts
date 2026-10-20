@@ -96,6 +96,41 @@ test.describe('Adding staff', () => {
     expect(times).not.toContain('12:00');
     expect(times.at(-1)).toBe('16:40');
   });
+
+  // Found in the manual retest: a failure that wasn't about one field showed above the whole
+  // form, out of view of the button that was just pressed.
+  test('shows a failure to save next to the Add doctor button', async ({ page, guard }) => {
+    guard.expectResponse(500, /\/api\/v1\/doctors$/);
+    await openAs(page, ADMIN, '/admin?tab=doctor');
+    await page.route(
+      (url) => url.pathname.endsWith('/api/v1/doctors'),
+      (route) =>
+        route.request().method() === 'POST'
+          ? route.fulfill({
+              status: 500,
+              contentType: 'application/json',
+              body: JSON.stringify({
+                success: false,
+                message: 'Internal server error',
+                data: null,
+                meta: { requestId: 'e2e' },
+              }),
+            })
+          : route.continue(),
+    );
+    await page.getByLabel('Full name').fill('Dr. Tara Bhatt');
+    await page.getByLabel('Email').fill('tara.bhatt@clinic.example');
+    await page.getByLabel('First password', { exact: true }).fill(PASSWORD);
+    await page.getByLabel('Department').selectOption({ label: 'Pediatrics' });
+    await page.getByLabel('Specialization').fill('Neonatology');
+    await page.getByRole('button', { name: 'Add doctor' }).click();
+
+    const failure = page
+      .getByRole('alert')
+      .filter({ hasText: 'Something went wrong on the server' });
+    await expect(failure).toBeVisible();
+    await expect(failure).toBeInViewport({ ratio: 1 });
+  });
 });
 
 test.describe('Editing a schedule', () => {
@@ -211,6 +246,9 @@ test.describe('Editing a schedule', () => {
       .filter({ hasText: 'Not saved: 1 booked appointment would lose its slot' });
     await expect(refusal).toContainText('12:30–13:00');
     await expect(refusal).toContainText('Lakshmi Menon');
+    // Found in the manual retest: the refusal sat at the top of the week, out of view of the
+    // Save button that was just pressed.
+    await expect(refusal).toBeInViewport({ ratio: 1 });
     expect(
       (await admin.get<{ slotDurationMinutes: number }>(`/doctors/${created.id}`))
         .slotDurationMinutes,
