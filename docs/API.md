@@ -169,7 +169,7 @@ These apply to every endpoint:
 - **Timestamps** in responses (`createdAt`, `arrivedAt` and so on) are ISO 8601 in UTC.
 - **Text** fields are trimmed before their length is checked, except passwords.
 - **Unknown body fields** are ignored. Body keys that start with `$` or contain `.` are removed before validation, so MongoDB operators can't be injected. A body nested more than 32 levels deep gets `400 Request body is nested too deeply`.
-- **Query strings** are flat: `?a[b]=1` is not turned into an object.
+- **Query strings** are flat: `?a[b]=1` is not turned into an object. `?search[$gt]=x` is a parameter literally named `search[$gt]`, and like any **unknown query parameter** it is ignored: the request runs without it, and the answer is `200`.
 
 ### Order of checks
 

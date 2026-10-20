@@ -372,3 +372,18 @@ docs/       assessment brief and design decision notes
 ```
 
 Server modules import each other through the `#app/*` alias (for example `#app/config/env.js`), which Node resolves natively through `package.json` `imports`. Client modules use the `@/` alias (for example `@/config/env`), which Vite and TypeScript resolve.
+
+## Assumptions
+
+Where the brief left room for interpretation, this build assumes the following. The questions behind them are in [`docs/MANUAL_TEST_REPORT.md`](docs/MANUAL_TEST_REPORT.md) (Q-01 to Q-07).
+
+- **A doctor may have no working days (Q-01).** An empty week (`schedule: []`) is accepted when a doctor is created and when a schedule is edited, for a doctor who is on leave or whose hours aren't known yet. Such a doctor is listed but offers no slots on any day. The brief lists "no working days" among invalid schedules; this build reads it as "no bookable day", not as an error.
+- **Mobile numbers aren't unique (Q-02).** Families often share one phone, so two patients may have the same number. The new-patient form lists the patients already registered with a number ("Is it one of these?"), but never refuses to register.
+- **Unknown query parameters are ignored (Q-05).** Query strings are parsed flat, so `?search[$gt]=x` is a parameter literally named `search[$gt]`. No endpoint knows it, so it is dropped like any unknown parameter, and the request runs without it. It is never read as a MongoDB operator. JSON bodies are stricter: keys that start with `$` or contain `.` are removed, and deep nesting gets 400.
+- **Every date and time is the clinic's.** Dates and times are wall-clock values in `CLINIC_TIMEZONE`, and "today" and "now" come from the clinic's clock, whatever the browser's timezone.
+
+## Known limitations
+
+- **No booking horizon (Q-04).** Any future day the doctor works can be booked, even years ahead (a slot in 2099 is accepted). A clinic that wants a limit would add a configurable horizon, such as 90 days, answered with 422.
+- **An empty week gives no warning (Q-01).** The schedule editor saves a week with every day switched off without asking first, and the doctor then has no slots until a day is added back.
+- **Operator-looking query parameters get 200, not 400 (Q-05).** `?search[$gt]=` or `?status[$ne]=CANCELLED` runs as if the parameter weren't there: nothing is injected, but nothing is refused either. Strict query schemas, which reject unknown parameters with 400, would be the change if a client needs to be told.
