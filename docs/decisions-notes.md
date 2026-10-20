@@ -331,6 +331,7 @@ Every index exists because a query needs it, since each extra index slows writes
   - 30 seconds by default
   - 5 minutes for doctors
   - 30 minutes for departments
+- **Offline, requests fail instead of waiting (`networkMode: 'always'`).** TanStack Query's default pauses queries and mutations while the browser reports no connection. Manual QA found what that means here: an endless skeleton on the scheduler, the list showing the old rows under a new filter, and a booking that would send itself whenever the connection came back, perhaps minutes later. The app only works online, so requests now fail and show their error state with "Try again". `refetchOnReconnect` is set explicitly, because `'always'` turns it off by default; a failed screen loads again by itself on reconnect.
 - **Expected 401 on a first visit.** The silent refresh answers 401 when nobody is signed in on this browser, and Chrome logs every 4xx response in the console. That one request is expected, and the end-to-end checks allow it.
 
 ## Frontend Phase 2: Reusable components
