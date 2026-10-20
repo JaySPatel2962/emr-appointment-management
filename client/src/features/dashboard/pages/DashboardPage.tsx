@@ -173,7 +173,7 @@ export const DashboardPage = () => {
               />
             </Panel>
           ) : (
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <AppointmentQueue
                 title="Waiting now"
                 description="Patients who have arrived, in slot order."

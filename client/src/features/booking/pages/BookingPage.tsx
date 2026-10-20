@@ -70,7 +70,7 @@ export const BookingPage = () => {
       <form
         noValidate
         onSubmit={submit}
-        className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"
+        className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"
       >
         <Panel title="Time">
           <BookingTimeSection

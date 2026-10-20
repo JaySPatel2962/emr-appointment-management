@@ -117,7 +117,9 @@ const RowView = <T, S extends string>({
         data-label={column.header}
         className={cn(
           cellDisplay(column.visibleFrom),
-          'items-start justify-between gap-4 py-1 text-sm text-ink @3xl:px-4 @3xl:py-3 @3xl:align-middle',
+          // wrap-anywhere: a long word (a name without spaces, a list of tests joined by "/")
+          // wraps instead of widening its column, which would push the last columns out of view.
+          'items-start justify-between gap-4 py-1 text-sm wrap-anywhere text-ink @3xl:px-4 @3xl:py-3 @3xl:align-middle',
           !column.primary &&
             !column.hideLabelOnMobile &&
             'before:shrink-0 before:font-semibold before:text-ink-muted before:content-[attr(data-label)] @3xl:before:content-none',

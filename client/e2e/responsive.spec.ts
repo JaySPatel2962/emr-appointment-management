@@ -20,6 +20,11 @@ import { ADMIN } from './support/seed-data';
 
 const DAY = suiteDate('responsive');
 
+// Words that can't wrap at a space: a long name, and a list of tests joined by "/". Manual QA
+// found that text like this widened its tile, its table column or its page.
+const LONG_NAME = 'Srivenkatanarasimharajuvaripetasubrahmanyamsastry';
+const LONG_PURPOSE = 'ECG/ECHO/TMT/Holter/LipidProfile/HbA1c/TSH/CBC/LFT/KFT/UrineRoutine';
+
 const SIZES = [
   { name: 'phone', width: 375, height: 812 },
   { name: 'tablet', width: 768, height: 1024 },
@@ -91,6 +96,13 @@ test.beforeAll(async () => {
     purpose: 'A long purpose, to see that long text wraps instead of widening the page',
     patientId: patients.lakshmi.id,
   });
+  await ensureBooked(await apiAs(ADMIN), {
+    doctorId: doctors.kavya.id,
+    date: DAY,
+    slotStart: '09:15',
+    purpose: LONG_PURPOSE,
+    newPatient: { name: LONG_NAME, mobile: '9811144455', gender: 'MALE' },
+  });
 });
 
 for (const size of SIZES) {
@@ -111,6 +123,44 @@ for (const size of SIZES) {
         expect(await horizontalOverflow(page), screen.name).toBe(0);
         await screenshot(page, testInfo, `${size.width}-${screen.name}`);
       }
+    });
+
+    test('long words stay inside their tiles, rows and forms', async ({ page }) => {
+      const { doctors } = seedInfo();
+      await signIn(page.context(), ADMIN);
+
+      // The slot tile truncates the name instead of growing past its cell.
+      await page.goto(schedulerPath(doctors.kavya.id, DAY));
+      await expect(slotTiles(page).filter({ hasText: '09:15' })).toBeVisible();
+      const widerThanCell = await slotTiles(page).evaluateAll(
+        (cells) =>
+          cells.filter((cell) => {
+            const tile = cell.firstElementChild;
+            return tile !== null && tile.scrollWidth > cell.clientWidth + 1;
+          }).length,
+      );
+      expect(widerThanCell, 'tiles wider than their cell').toBe(0);
+      expect(await horizontalOverflow(page), 'scheduler').toBe(0);
+
+      // The row's actions stay inside the table's card.
+      await page.goto(listPath({ patientName: LONG_NAME.slice(0, 12) }));
+      await expect(listRows(page)).toHaveCount(1);
+      const clipped = await listRows(page)
+        .first()
+        .evaluate((row) => {
+          const card = row.closest('.overflow-hidden')?.getBoundingClientRect();
+          const buttons = [...row.querySelectorAll('button')].map((b) => b.getBoundingClientRect());
+          return card ? Math.max(0, ...buttons.map((b) => b.right - card.right)) : -1;
+        });
+      expect(clipped, 'row actions cut off by').toBe(0);
+      expect(await horizontalOverflow(page), 'list').toBe(0);
+
+      // The booking form's search result and chosen patient wrap.
+      await page.goto(bookingPath(doctors.kavya.id, DAY));
+      await page.getByLabel('Find the patient').fill(LONG_NAME.slice(0, 12));
+      await page.getByRole('radio', { name: new RegExp(LONG_NAME) }).click();
+      await expect(page.getByRole('button', { name: 'Change patient' })).toBeVisible();
+      expect(await horizontalOverflow(page), 'booking').toBe(0);
     });
 
     test('the navigation and the list fit the screen', async ({ page }) => {

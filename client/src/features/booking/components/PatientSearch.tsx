@@ -54,7 +54,7 @@ export const PatientSearch = ({ selected, onSelect, onRegister, error }: Patient
         <div className="flex min-w-0 items-center gap-3">
           <UserRound aria-hidden="true" size={20} className="shrink-0 text-carbon" />
           <div className="min-w-0">
-            <p className="font-semibold text-ink">{selected.name}</p>
+            <p className="font-semibold wrap-anywhere text-ink">{selected.name}</p>
             <p className="text-xs text-ink-muted tabular-nums">{describe(selected, today)}</p>
           </div>
         </div>
@@ -119,7 +119,9 @@ export const PatientSearch = ({ selected, onSelect, onRegister, error }: Patient
                     className="mt-1 size-4 shrink-0 accent-carbon"
                   />
                   <span className="min-w-0">
-                    <span className="block font-semibold text-ink">{patient.name}</span>
+                    <span className="block font-semibold wrap-anywhere text-ink">
+                      {patient.name}
+                    </span>
                     <span className="block text-xs text-ink-muted tabular-nums">
                       {describe(patient, today)}
                     </span>

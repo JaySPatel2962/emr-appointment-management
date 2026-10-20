@@ -432,6 +432,10 @@ Every index exists because a query needs it, since each extra index slows writes
 - **Container queries where a component lives in more than one width.**
   - The table switches between cards and rows at a container width of 48rem, not at a screen width, because the same table sits beside the sidebar on a desktop and alone on a tablet.
   - The doctor, department and date fields stack in the booking form's narrow column, and line up in the scheduler's wide panel.
+- **Long words never widen a layout.** Names and purposes are typed by people, and some can't wrap at a space: a long South Indian name, or a list of tests joined by "/". Manual QA found such text pushing the list's row actions 238 px out of view at 1280 px, widening slot tiles into their neighbours, and making the dashboard and booking form scroll sideways on a phone. Three rules prevent it:
+  - Table cells wrap anywhere (`wrap-anywhere`), so a column is never wider than it needs to be for wrapped text.
+  - A slot tile has `min-w-0`, so its name is truncated instead of setting the tile's width.
+  - Single-column grids are explicit (`grid-cols-1`, which is `minmax(0, 1fr)`), so their content can't stretch the column.
 - **The one inline style:** the data-driven width of a chart bar, which no static class can express.
 
 ## Frontend Phase 4: Performance and quality

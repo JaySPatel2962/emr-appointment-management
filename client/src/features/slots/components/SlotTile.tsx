@@ -21,8 +21,10 @@ export interface SlotTileProps {
   highlighted: boolean;
 }
 
+// min-w-0: a tile is a grid item, so without it a long patient name would set its width and
+// push it into the next tile instead of being truncated.
 const BASE =
-  'flex min-h-16 flex-col justify-between gap-1 rounded-md border p-2.5 text-left transition-colors';
+  'flex min-h-16 min-w-0 flex-col justify-between gap-1 rounded-md border p-2.5 text-left transition-colors';
 
 const Time = ({ value, className }: { value: string; className?: string }) => (
   <span className={cn('text-lg leading-none font-bold tabular-nums', className)}>{value}</span>
