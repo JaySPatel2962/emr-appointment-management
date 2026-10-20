@@ -34,7 +34,7 @@ An independent, manual QA pass over the EMR appointment module, against every re
 - **Not tested:** listed at the [end](#not-tested).
 - **Final runs after all fixes:** see [Final regression runs](#final-regression-runs).
 
-**How to read the tables.** Result is PASS, FAIL (a bug, listed under [Bugs](#bugs)), INFO (behavior recorded without a pass/fail expectation) or QUESTION (ambiguous against the assessment, listed under [Open questions](#open-questions)). Evidence gives database ids or counts, read with read-only queries, and the screenshot. Ten key screenshots are kept in [`docs/manual-qa/`](manual-qa/) (see [Screenshots](#screenshots)). The others named in the tables were taken during the run and are kept outside git, in the gitignored `qa/manual-qa-archive/` and `qa/shots-r2/`.
+**How to read the tables.** Result is PASS, FAIL (a bug, listed under [Bugs](#bugs)), INFO (behavior recorded without a pass/fail expectation) or QUESTION (ambiguous against the assessment, listed under [Open questions](#open-questions)). Evidence gives database ids or counts, read with read-only queries, and the name of the screenshot taken. The screenshots are not part of the repository (see [Screenshots](#screenshots)).
 
 ## Step 0: Pre-checks
 
@@ -484,7 +484,7 @@ The windows were 1180 px wide, and another role's window kept the scheduler open
 | R2-H-03 | `server/.env` and `.env.example` are at their defaults | PASS | Both have `NODE_ENV=development`, `JWT_ACCESS_TTL_SECONDS=900` and `RATE_LIMIT_MAX=300`, and all their other settings match. `.env` was never committed (`git log --all` has no entry for it). |
 | R2-H-04 | The whole git history searched for "mongodb+srv" and for real secrets | PASS | 0 matches in any commit for each of 14 real values: the Atlas user, password and host, both JWT secrets, the seed admin password and the 7 QA passwords. Only counts were printed. "mongodb+srv" appears only in the env validation regex, the `.env.example` placeholder and two lines of prose. |
 | R2-H-05 | `qa/` and `qa-credentials.local.md` are gitignored | PASS | `.gitignore` lines 34 and 35 (`git check-ignore -v`) |
-| R2-H-06 | At most 10 screenshots in git | Done | See [Screenshots](#screenshots) |
+| R2-H-06 | At most 10 screenshots in git | Done | Later removed from the repository altogether (see [Screenshots](#screenshots)) |
 | R2-H-07 | API.md, DATABASE_DESIGN.md and decisions-notes cover the nested-body 400, the foreign-origin 403, the digit rule for mobile terms, the audit role, the new indexes and the schedule-edit 409 | Done | `2465c11` adds the audit role and the origin rule to API.md and DATABASE_DESIGN.md, and the digit rule to DATABASE_DESIGN.md. The rest landed with each change. |
 
 ## R3: Retest of the Q-08 change and the booking race
@@ -604,20 +604,7 @@ The first e2e run had one timeout (81 passed): the axe-core test "the front desk
 
 ## Screenshots
 
-Ten are kept in [`docs/manual-qa/`](manual-qa/). The rest of the run's screenshots are outside git, in the gitignored `qa/manual-qa-archive/` (first pass) and `qa/shots-r2/` (R2).
-
-| File | Shows |
-| --- | --- |
-| `E-01-round1-loser.png` | Double booking: the window that lost the race is told, and sees the slot taken (E-01) |
-| `LT-before-1280-list.png` | BUG-04 before the fix: a 49-character name pushes the row's actions out of the list at 1280 px |
-| `LT-after-1280-list.png` | BUG-04 after the fix |
-| `A-20a-grid-after-20-min.png` | Q-07 before the change: a slot-length change left booked visits off the grid and offered overlapping slots |
-| `R2-01-schedule-change-refused.png` | Q-07 after the change (and BUG-10's fix): the refusal lists the bookings, next to the Save button |
-| `R2-BUG11-times-clipped-375.png` | BUG-11 before the fix: "09:0" in the schedule editor at 375 px |
-| `R2-BUG11-times-in-full-375.png` | BUG-11 after the fix |
-| `R2-BUG12-no-sort-control-768.png` | BUG-12 before the fix: the list at 768 px, with no sort control |
-| `R2-BUG12-sort-choice-768.png` | BUG-12 after the fix: the "Sort by" choice at 768 px |
-| `R2-04-mobile-hint-375.png` | Q-02: "Is it one of these?" for a number three patients share, at 375 px |
+Screenshots were taken throughout the runs, and the tables name the one behind each result. They are not part of the repository: they stay with the manual QA scripts, outside git.
 
 ## Not tested
 

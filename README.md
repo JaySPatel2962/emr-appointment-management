@@ -69,7 +69,7 @@ client/
     hooks/ utils/ types/ constants/ config/ styles/ test/
   e2e/             Playwright specs; support/ holds the test stack, seed data and helpers
 docs/              API.md, DATABASE_DESIGN.md (+ database-design.html), decisions-notes.md,
-                   MANUAL_TEST_REPORT.md (+ manual-qa/ screenshots), postman_collection.json
+                   MANUAL_TEST_REPORT.md, postman_collection.json
 ENGINEERING_DECISIONS.md
 ```
 

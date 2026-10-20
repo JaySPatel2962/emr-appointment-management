@@ -220,7 +220,7 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
     - the list's text filters: two boxes edited in one pause both apply, "Clear filters" can't be undone by a search still waiting, and the boxes follow the URL when it changes elsewhere (`useTextFilters`)
     - a row action re-rendered every row's buttons; now only its own (`useIsActionPending`)
     - the date picker named a past day "no sessions"; it now says "unavailable", and its button is named by its label and date
-- Manual QA: `docs/MANUAL_TEST_REPORT.md` (screenshots in `docs/manual-qa/`), run against the Atlas database `emr_manual_qa`. It found twelve bugs (nine in the first pass, three in the R2 retest), each fixed in its own `fix:` commit with a regression test:
+- Manual QA: `docs/MANUAL_TEST_REPORT.md` (its screenshots stay outside the repository, in the gitignored `qa/`), run against the Atlas database `emr_manual_qa`. It found twelve bugs (nine in the first pass, three in the R2 retest), each fixed in its own `fix:` commit with a regression test:
   - long words breaking layouts
   - cross-site sign-out
   - nested-JSON 500s
