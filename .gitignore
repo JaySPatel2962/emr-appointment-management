@@ -29,3 +29,7 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Manual QA: throwaway scripts, logs and local test credentials
+qa/
+qa-credentials.local.md

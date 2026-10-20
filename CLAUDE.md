@@ -113,7 +113,7 @@ Client (run in `client/`):
 - `npm run e2e:ui` / `npm run e2e:report`: the same in Playwright's UI mode / the HTML report of the last run
 
 ## Backend status
-All backend phases are done and committed on `feat/backend`: 174 tests pass, about 92% line coverage.
+All backend phases are done and committed on `feat/backend`: 184 tests pass, about 93% line coverage.
 - Done: 0 tooling, 1 foundation (env, errors, security, health), 2 models and indexes, 3 auth, 4 doctors, receptionists and departments, 5 slot generation, 6 appointments and patients, 7 Socket.IO, 8 concurrency, RBAC and end-to-end tests
 - Not done yet: `ENGINEERING_DECISIONS.md`, the README's assumptions, limitations and future sections, a git remote. The frontend's progress is under Frontend status below.
 - Design decisions: `docs/decisions-notes.md`
@@ -214,10 +214,22 @@ The frontend is built on `feat/frontend` (branched from `feat/backend`), one pha
     - component tests for the login form, ProtectedRoute and RoleRoute, the slot grid and the table
     - axe-core on 23 screen states, with no violations
     - scripted keyboard and focus checks
-  - 5 end-to-end tests: 79 Playwright tests in `client/e2e/` covering auth, RBAC, the scheduler, booking, double booking, live updates, the list, row actions, admin, the dashboard, three screen widths, accessibility and render counts. Fixes they led to:
+  - 5 end-to-end tests: 82 Playwright tests in `client/e2e/` covering auth, RBAC, the scheduler, booking, double booking, live updates, the list, row actions, admin, the dashboard, three screen widths, accessibility and render counts. Fixes they led to:
     - the list's text filters: two boxes edited in one pause both apply, "Clear filters" can't be undone by a search still waiting, and the boxes follow the URL when it changes elsewhere (`useTextFilters`)
     - a row action re-rendered every row's buttons; now only its own (`useIsActionPending`)
     - the date picker named a past day "no sessions"; it now says "unavailable", and its button is named by its label and date
+- Manual QA: `docs/MANUAL_TEST_REPORT.md` (screenshots in `docs/manual-qa/`), run against the Atlas database `emr_manual_qa`. It found nine bugs, each fixed in its own `fix:` commit with a regression test:
+  - long words breaking layouts
+  - cross-site sign-out
+  - nested-JSON 500s
+  - silent offline pauses
+  - stale patient results
+  - separator-only searches
+  - missing audit roles
+  - the offline chunk message
+  - the admin tab scrollbar
+
+  Its open questions (Q-01 to Q-07) are product decisions still to take. The throwaway scripts in `qa/` and `qa-credentials.local.md` are gitignored.
 - Design decisions: the Frontend sections of `docs/decisions-notes.md`
 
 ### End-to-end tests (`client/e2e/`)

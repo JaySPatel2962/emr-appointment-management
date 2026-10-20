@@ -3,8 +3,9 @@
 Appointment management module for an enterprise EMR system. It covers role-based access (Super Admin, Receptionist, Doctor), doctor schedules, dynamically generated slots, booking that is safe against double booking, and real-time scheduler updates.
 
 > **Status:**
-> - The backend (`server/`) is complete and tested: 174 tests, about 92% line coverage.
-> - The frontend (`client/`) is complete: login, dashboard, scheduler, booking, appointment list, and staff and schedules. Unit and component tests cover its logic, and 79 Playwright end-to-end tests run it against the real API.
+> - The backend (`server/`) is complete and tested: 184 tests, about 93% line coverage.
+> - The frontend (`client/`) is complete: login, dashboard, scheduler, booking, appointment list, and staff and schedules. 102 unit and component tests cover its logic, and 82 Playwright end-to-end tests run it against the real API.
+> - A manual end-to-end QA pass, run like real clinic use against a real MongoDB, is written up in [`docs/MANUAL_TEST_REPORT.md`](docs/MANUAL_TEST_REPORT.md). It found nine bugs, all fixed, and lists the questions still open.
 > - Design decisions are recorded in [`docs/decisions-notes.md`](docs/decisions-notes.md).
 
 ## Tech stack
@@ -336,7 +337,7 @@ The integration tests prove the guarantees that matter:
 
 `npm test` in `client/` runs Vitest with Testing Library: the refresh queue, env validation, dates and the calendar, schedule rules, booking requests, the list's search boxes, and components such as the login form, the route guards, the slot grid and the table. Two of them count renders to prove the memoization works: a live update re-renders one slot tile, and a changed row re-renders one table row.
 
-`npm run e2e` in `client/` runs 79 Playwright tests in Chromium against the real API. Before the first test, global setup starts an in-memory MongoDB with its own database (`emr_appointments_e2e`) and the API on port 5100 in test mode, which never reads `server/.env`. It then seeds a clinic through the API: two doctors with morning and evening sessions and a lunch break, a receptionist and eight patients. Playwright serves a production build of the app on port 4173. Nothing touches your own database, and no `.env` is needed; ports 5100 and 4173 must be free.
+`npm run e2e` in `client/` runs 82 Playwright tests in Chromium against the real API. Before the first test, global setup starts an in-memory MongoDB with its own database (`emr_appointments_e2e`) and the API on port 5100 in test mode, which never reads `server/.env`. It then seeds a clinic through the API: two doctors with morning and evening sessions and a lunch break, a receptionist and eight patients. Playwright serves a production build of the app on port 4173. Nothing touches your own database, and no `.env` is needed; ports 5100 and 4173 must be free.
 
 What the end-to-end tests check:
 
