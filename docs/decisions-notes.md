@@ -503,7 +503,7 @@ The `design:accessibility-review` skill isn't available in this environment, so 
   - A dialog takes focus, never lets Tab reach the page behind it, closes on Esc and returns focus to what opened it. The mobile menu does the same, and closes when a link is followed.
   - Tabs follow the arrow-key and Home/End pattern.
 
-Both checks now run in the end-to-end suite (`e2e/quality.spec.ts`) on every run.
+Both checks now run in the end-to-end suite (`e2e/quality.spec.ts`) on every run, with axe-core on 21 screen states.
 
 Issues found and fixed while building:
 - `aria-invalid` on a button and on radios, which ARIA 1.2 doesn't allow there.

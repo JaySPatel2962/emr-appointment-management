@@ -115,9 +115,9 @@ Client (run in `client/`):
 - `npm run e2e:ui` / `npm run e2e:report`: the same in Playwright's UI mode / the HTML report of the last run
 
 ## Backend status
-All backend phases are done and committed on `feat/backend`. With the later fixes on `feat/frontend`, 215 tests pass, about 93% line coverage.
+All backend phases are done and committed on `feat/backend`. With the later fixes on `feat/frontend`, 226 tests pass, about 93% line coverage.
 - Done: 0 tooling, 1 foundation (env, errors, security, health), 2 models and indexes, 3 auth, 4 doctors, receptionists and departments, 5 slot generation, 6 appointments and patients, 7 Socket.IO, 8 concurrency, RBAC and end-to-end tests
-- `ENGINEERING_DECISIONS.md` (repo root) answers the brief's seven questions, from `docs/decisions-notes.md`. Not done yet: a git remote. The frontend's progress is under Frontend status below.
+- `ENGINEERING_DECISIONS.md` (repo root) answers the brief's seven questions, from `docs/decisions-notes.md`. The remote, `origin`, is `github.com/JaySPatel2962/emr-appointment-management`. The frontend's progress is under Frontend status below.
 - Design decisions: `docs/decisions-notes.md`
 
 ### Response shapes

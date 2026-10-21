@@ -32,7 +32,7 @@ Design reasoning: [`ENGINEERING_DECISIONS.md`](ENGINEERING_DECISIONS.md), with t
 
 **Status.** Complete and tested:
 - **Server:** 226 tests, about 93% of lines covered.
-- **Client:** 117 unit and component tests, and 92 Playwright end-to-end tests against the real API.
+- **Client:** 118 unit and component tests, and 92 Playwright end-to-end tests against the real API.
 - **Manual QA:** an end-to-end pass, run like real clinic use against a real MongoDB, is written up in [`docs/MANUAL_TEST_REPORT.md`](docs/MANUAL_TEST_REPORT.md). It found 12 bugs, all fixed, and nine questions: five resolved by changes and four kept and documented below.
 
 **Tech stack.**
