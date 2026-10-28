@@ -4,6 +4,7 @@ The appointment module of an enterprise EMR system: role-based access (Super Adm
 
 ## Contents
 
+- [Demo videos](#demo-videos)
 - [Project overview](#project-overview)
 - [Folder structure](#folder-structure)
 - [Architecture overview](#architecture-overview)
@@ -18,6 +19,24 @@ The appointment module of an enterprise EMR system: role-based access (Super Adm
 - [Future improvements](#future-improvements)
 
 Design reasoning: [`ENGINEERING_DECISIONS.md`](ENGINEERING_DECISIONS.md), with the phase-by-phase notes in [`docs/decisions-notes.md`](docs/decisions-notes.md).
+
+## Demo videos
+
+Both are recordings of the real app and API, and play in the browser from Google Drive.
+
+- **[60-second teaser](https://drive.google.com/file/d/1f5sZNseatqT01Mq9dOoMDeQqT1F6l-uv/view):** the module at a glance. It shows the scheduler, a booking, two receptionists seeing each other's changes live, a double booking refused, and the three roles. It has captions, so it works with the sound off.
+- **[6-minute walkthrough](https://drive.google.com/file/d/1WqsQ9nAfnu096YrfcfKNcnSTv5xKFq-s/view):** the whole flow in eight scenes. Each starts with a title card saying what it shows:
+
+| Time | Scene |
+| --- | --- |
+| 0:05 | Log in as the Super Admin and look at the dashboard |
+| 0:30 | Add a doctor with a weekly schedule, then a receptionist |
+| 1:39 | The receptionist logs in and opens the scheduler |
+| 2:22 | Book a new patient, then two existing patients (by name and by mobile) |
+| 3:31 | Two receptionists side by side: a booking and a cancellation appear live |
+| 4:14 | Double booking: both book the same slot at the same moment |
+| 4:50 | The appointment list: search, filter, sort, page, and act on a row |
+| 5:46 | The doctor logs in: only their own appointments, and no booking or cancelling |
 
 ## Project overview
 

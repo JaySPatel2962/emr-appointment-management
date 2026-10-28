@@ -36,3 +36,13 @@ Thumbs.db
 # Manual QA: throwaway scripts, logs and local test credentials
 qa/
 qa-credentials.local.md
+
+# Screen-recording demo and the teaser video (demo/teaser/): local only, kept out of the repo
+demo/
+demo-credentials.local.md
+# The teaser's renders and footage, in case the rule above is ever narrowed
+demo/teaser/out/
+demo/teaser/node_modules/
+demo/teaser/footage-raw/
+demo/teaser/footage-1080p-old/
+demo/teaser/public/footage/
